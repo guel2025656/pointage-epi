@@ -26,12 +26,13 @@ enum StatutAbsence {
   REFUSEE
 }
 
-model Secteur { 
-  id String @id @default(cuid()) 
-  nom String @unique sites Site[] 
-  acteurs Acteur[] 
-  admins Admin[] 
-  createdAt DateTime @default(now()) 
+model Secteur {
+  id        String   @id @default(cuid())
+  nom       String   @unique
+  sites     Site[]
+  acteurs   Acteur[]
+  admins    Admin[]
+  createdAt DateTime @default(now())
 }
 
 model Site {
