@@ -1,0 +1,9 @@
+{
+  "name": "Pointage EPI",
+  "short_name": "Pointage EPI",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#eeece5",
+  "theme_color": "#185fa5",
+  "icons": []
+}

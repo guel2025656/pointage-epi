@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ENSEIGNANT_ITINERANT
+  VOLONTAIRE
+  CANEF
+  CPPP
+  IEPP
+}
+
+enum PorteeAdmin {
+  NATIONALE
+  SECTEUR
+}
+
+enum StatutAbsence {
+  EN_ATTENTE
+  APPROUVEE
+  REFUSEE
+}
+
+model Secteur {
+  id       String   @id @default(cuid())
+  nom      String   @unique
+  sites    Site[]
+  admins   Admin[]
+  createdAt DateTime @default(now())
+}
+
+model Site {
+  id        String   @id @default(cuid())
+  nom       String
+  secteurId String
+  secteur   Secteur  @relation(fields: [secteurId], references: [id])
+  acteurs   Acteur[]
+  pointages Pointage[]
+  createdAt DateTime @default(now())
+
+  @@unique([secteurId, nom])
+}
+
+model Acteur {
+  id        String     @id @default(cuid())
+  nom       String
+  role      Role
+  pin       String     // code à 4 chiffres, hashé
+  actif     Boolean    @default(true)
+  secteurId String
+  secteur   Secteur    @relation(fields: [secteurId], references: [id])
+  siteId    String
+  site      Site       @relation(fields: [siteId], references: [id])
+  pointages Pointage[]
+  absences  Absence[]
+  createdAt DateTime   @default(now())
+}
+
+model Admin {
+  id           String       @id @default(cuid())
+  nom          String
+  email        String       @unique
+  passwordHash String
+  portee       PorteeAdmin  @default(SECTEUR)
+  secteurId    String?
+  secteur      Secteur?     @relation(fields: [secteurId], references: [id])
+  createdAt    DateTime     @default(now())
+}
+
+model Pointage {
+  id            String    @id @default(cuid())
+  acteurId      String
+  acteur        Acteur    @relation(fields: [acteurId], references: [id])
+  siteId        String
+  site          Site      @relation(fields: [siteId], references: [id])
+  date          DateTime  @db.Date
+  heureArrivee  String?
+  heureDepart   String?
+  latArrivee    Float?
+  lngArrivee    Float?
+  latDepart     Float?
+  lngDepart     Float?
+  creeHorsLigne Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([acteurId, date])
+  @@index([siteId, date])
+}
+
+model Absence {
+  id         String        @id @default(cuid())
+  acteurId   String
+  acteur     Acteur        @relation(fields: [acteurId], references: [id])
+  dateDebut  DateTime      @db.Date
+  dateFin    DateTime      @db.Date
+  motif      String
+  statut     StatutAbsence @default(EN_ATTENTE)
+  createdAt  DateTime      @default(now())
+}

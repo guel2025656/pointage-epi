@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pointage EPI</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>Pointage EPI</h1>
+  <p class="sub">Suivi de présence des acteurs de l'Enseignement Par Itinérance</p>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="pointage">Pointage</div>
+    <div class="tab" data-tab="dashboard">Tableau de bord</div>
+    <div class="tab" data-tab="absences">Absences</div>
+    <div class="tab" data-tab="admin">Administration</div>
+  </div>
+
+  <!-- POINTAGE -->
+  <div class="panel active" id="panel-pointage">
+    <div class="card">
+      <h2>Se pointer</h2>
+      <div id="siteContext" class="status info hidden"></div>
+      <label>Secteur</label>
+      <select id="p-secteur"><option value="">Tous les secteurs</option></select>
+      <label>Site</label>
+      <select id="p-site"><option value="">Tous les sites</option></select>
+      <label>Votre nom</label>
+      <select id="p-acteur"><option value="">Sélectionnez votre nom</option></select>
+      <div class="row" style="margin-top:14px;">
+        <button id="btnArrivee">Enregistrer mon arrivée</button>
+        <button class="secondary" id="btnDepart">Enregistrer mon départ</button>
+      </div>
+      <div id="pointageStatus"></div>
+    </div>
+    <div class="card">
+      <h2>Mes derniers pointages</h2>
+      <div id="mesPointages" class="muted">Sélectionnez votre nom pour voir votre historique.</div>
+    </div>
+    <div class="card hidden" id="queueCard">
+      <h2>En attente de synchronisation</h2>
+      <div id="queueList" class="muted"></div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="panel" id="panel-dashboard">
+    <div class="card" id="dashboardLoginPrompt">
+      <h2>Connexion superviseur requise</h2>
+      <p class="muted">Connectez-vous depuis l'onglet Administration pour consulter le tableau de bord.</p>
+    </div>
+    <div id="dashboardContent" class="hidden">
+      <div class="card">
+        <h2>Filtres</h2>
+        <div class="row">
+          <div><label>Secteur</label><select id="d-secteur"><option value="">Tous</option></select></div>
+          <div><label>Site</label><select id="d-site"><option value="">Tous</option></select></div>
+          <div><label>Depuis le</label><input type="date" id="d-from"></div>
+          <div><label>Jusqu'au</label><input type="date" id="d-to"></div>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <button class="secondary small" id="btnExportCsv">Exporter CSV</button>
+        </div>
+      </div>
+      <div class="stats" id="statCards"></div>
+      <div class="card">
+        <h2>Alertes — absences répétées</h2>
+        <div id="alertList" class="muted">Chargement…</div>
+      </div>
+      <div class="card">
+        <h2>Journal des pointages</h2>
+        <div class="scroll-x">
+          <table>
+            <thead><tr><th>Date</th><th>Acteur</th><th>Rôle</th><th>Site</th><th>Arrivée</th><th>Départ</th></tr></thead>
+            <tbody id="pointagesBody"><tr><td colspan="6" class="muted">Chargement…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ABSENCES -->
+  <div class="panel" id="panel-absences">
+    <div class="card">
+      <h2>Déclarer une absence / demande de justificatif</h2>
+      <label>Secteur</label>
+      <select id="a-secteur"><option value="">Tous les secteurs</option></select>
+      <label>Acteur</label>
+      <select id="a-acteur"><option value="">Sélectionnez un acteur</option></select>
+      <div class="row">
+        <div><label>Du</label><input type="date" id="a-debut"></div>
+        <div><label>Au</label><input type="date" id="a-fin"></div>
+      </div>
+      <label>Motif</label>
+      <textarea id="a-motif" placeholder="Motif de l'absence"></textarea>
+      <div style="margin-top:12px;"><button id="btnAbsence">Enregistrer la demande</button></div>
+      <div id="absenceStatus"></div>
+    </div>
+    <div class="card" id="absencesListCard">
+      <h2>Demandes (superviseurs connectés)</h2>
+      <div class="scroll-x">
+        <table>
+          <thead><tr><th>Acteur</th><th>Période</th><th>Motif</th><th>Statut</th><th></th></tr></thead>
+          <tbody id="absencesBody"><tr><td colspan="5" class="muted">Connectez-vous pour voir les demandes.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN -->
+  <div class="panel" id="panel-admin">
+    <div class="card" id="loginCard">
+      <h2>Connexion superviseur</h2>
+      <label>Email</label>
+      <input type="email" id="loginEmail" placeholder="admin@epi-meagui.ci">
+      <label>Mot de passe</label>
+      <input type="password" id="loginPassword">
+      <div style="margin-top:12px;"><button id="btnLogin">Se connecter</button></div>
+      <div id="loginStatus"></div>
+    </div>
+
+    <div class="hidden" id="adminContent">
+      <div class="card">
+        <h2>Session</h2>
+        <p class="muted" id="sessionInfo"></p>
+        <button class="secondary small" id="btnLogout">Se déconnecter</button>
+      </div>
+
+      <div class="card">
+        <h2>Ajouter un secteur</h2>
+        <div class="row">
+          <input id="n-secteur-nom" placeholder="Nom du secteur">
+          <button id="btnAddSecteur">Ajouter</button>
+        </div>
+        <div id="addSecteurStatus"></div>
+      </div>
+
+      <div class="card">
+        <h2>Ajouter un site</h2>
+        <div class="row">
+          <select id="n-site-secteur"><option value="">Secteur</option></select>
+          <input id="n-site-nom" placeholder="Nom du site">
+          <button id="btnAddSite">Ajouter</button>
+        </div>
+        <div id="addSiteStatus"></div>
+      </div>
+
+      <div class="card">
+        <h2>Ajouter un acteur</h2>
+        <div class="row">
+          <div><label>Nom</label><input id="n-nom" placeholder="Nom complet"></div>
+          <div><label>Rôle</label>
+            <select id="n-role">
+              <option value="ENSEIGNANT_ITINERANT">Enseignant itinérant</option>
+              <option value="VOLONTAIRE">Volontaire</option>
+              <option value="CANEF">CANEF</option>
+              <option value="CPPP">CPPP</option>
+              <option value="IEPP">IEPP</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div><label>Secteur</label><select id="n-secteur"></select></div>
+          <div><label>Site</label><select id="n-site"></select></div>
+          <div><label>Code PIN (4 chiffres)</label><input id="n-pin" maxlength="4" placeholder="0000"></div>
+        </div>
+        <div style="margin-top:12px;"><button id="btnAddActeur">Ajouter</button></div>
+        <div id="addActeurStatus"></div>
+      </div>
+
+      <div class="card">
+        <h2>QR codes de pointage par site</h2>
+        <p class="muted">À afficher ou imprimer sur chaque site — le scan ouvre l'appli avec le site pré-rempli.</p>
+        <div class="qrgrid" id="qrGrid"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PIN modal -->
+<div class="modal-backdrop hidden" id="pinModal">
+  <div class="modal">
+    <h2 style="margin:0 0 10px;font-size:15px;">Code PIN</h2>
+    <p class="muted" id="pinModalActeur"></p>
+    <input type="password" id="pinInput" maxlength="4" inputmode="numeric" placeholder="••••">
+    <div class="row" style="margin-top:14px;">
+      <button class="secondary" id="pinCancel">Annuler</button>
+      <button id="pinConfirm">Valider</button>
+    </div>
+    <div id="pinModalStatus"></div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
