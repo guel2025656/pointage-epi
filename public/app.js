@@ -26,6 +26,45 @@
     return data;
   }
 
+  // ---------- Paquet hors-ligne (secteurs/sites/acteurs + PIN hachés) ----------
+  function getOfflineBundle(){ try{ return JSON.parse(localStorage.getItem('epi_offline_bundle')||'null'); }catch(e){ return null; } }
+  function setOfflineBundle(b){ localStorage.setItem('epi_offline_bundle', JSON.stringify(b)); renderOfflineStatus(); }
+  function renderOfflineStatus(){
+    var el = document.getElementById('offlineStatus');
+    if(!el) return;
+    var b = getOfflineBundle();
+    if(!b){ el.textContent = 'Aucune donnée hors-ligne enregistrée sur cet appareil.'; return; }
+    var d = new Date(b.genereLe);
+    el.textContent = b.acteurs.length+' acteurs disponibles hors-ligne (téléchargés le '+d.toLocaleDateString('fr-FR')+' à '+d.toLocaleTimeString('fr-FR').slice(0,5)+').';
+  }
+  async function telechargerPourHorsLigne(){
+    var statusEl = document.getElementById('offlineStatus');
+    try{
+      var bundle = await apiGet('/api/offline/bundle');
+      setOfflineBundle(bundle);
+    }catch(e){
+      statusEl.className = 'muted';
+      statusEl.textContent = (getOfflineBundle() ? 'Mise à jour impossible (hors-ligne) — ' : 'Téléchargement impossible — ') + 'vérifiez votre connexion et réessayez.';
+    }
+  }
+  var btnTelecharger = document.getElementById('btnTelechargerHorsLigne');
+  if(btnTelecharger) btnTelecharger.addEventListener('click', telechargerPourHorsLigne);
+
+  var RAYON_TOLERANCE_METRES = 150;
+  function distanceMetres(lat1, lng1, lat2, lng2){
+    var R = 6371000, toRad = function(d){ return d*Math.PI/180; };
+    var dLat = toRad(lat2-lat1), dLng = toRad(lng2-lng1);
+    var a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)*Math.sin(dLng/2);
+    return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+  function verifierPresenceLocale(site, lat, lng){
+    if(!site || site.latitude==null || site.longitude==null) return null;
+    if(lat==null || lng==null) return "La géolocalisation est requise pour pointer sur ce site. Activez-la puis réessayez.";
+    var d = distanceMetres(site.latitude, site.longitude, lat, lng);
+    if(d > RAYON_TOLERANCE_METRES) return 'Vous semblez trop loin du site ('+Math.round(d)+' m) pour pointer. Rapprochez-vous puis réessayez.';
+    return null;
+  }
+
   // ---------- Tabs ----------
   document.querySelectorAll('.tab').forEach(function(t){
     t.addEventListener('click', function(){
@@ -72,6 +111,7 @@
     if(remaining.length < q.length) renderMesPointages();
   }
   window.addEventListener('online', trySyncQueue);
+  window.addEventListener('online', function(){ telechargerPourHorsLigne().catch(function(){}); });
 
   function getGeoloc(){
     return new Promise(function(resolve, reject){
@@ -95,7 +135,13 @@
   }
 
   async function loadSecteurs(){
-    state.secteurs = await apiGet('/api/secteurs');
+    try{
+      state.secteurs = await apiGet('/api/secteurs');
+    }catch(e){
+      var b = getOfflineBundle();
+      if(!b) throw e;
+      state.secteurs = b.secteurs;
+    }
     fillSelect('p-secteur', state.secteurs, 'Tous les secteurs');
     fillSelect('d-secteur', state.secteurs, 'Tous');
     fillSelect('a-secteur', state.secteurs, 'Tous les secteurs');
@@ -103,7 +149,16 @@
     fillSelect('n-site-secteur', state.secteurs, 'Choisir');
   }
   async function loadSites(secteurId, targetId, placeholder){
-    var sites = await apiGet('/api/sites'+(secteurId?('?secteurId='+secteurId):''));
+    var sites;
+    try{
+      sites = await apiGet('/api/sites'+(secteurId?('?secteurId='+secteurId):''));
+    }catch(e){
+      var b = getOfflineBundle();
+      if(!b) throw e;
+      sites = b.sites.filter(function(s){ return !secteurId || s.secteurId===secteurId; });
+    }
+    state.sitesIndex = state.sitesIndex || {};
+    sites.forEach(function(s){ state.sitesIndex[s.id] = s; });
     fillSelect(targetId, sites, placeholder);
     return sites;
   }
@@ -111,7 +166,15 @@
     var qs = [];
     if(secteurId) qs.push('secteurId='+secteurId);
     if(siteId) qs.push('siteId='+siteId);
-    state.acteurs = await apiGet('/api/acteurs'+(qs.length?('?'+qs.join('&')):''));
+    try{
+      state.acteurs = await apiGet('/api/acteurs'+(qs.length?('?'+qs.join('&')):''));
+    }catch(e){
+      var b = getOfflineBundle();
+      if(!b) throw e;
+      state.acteurs = b.acteurs.filter(function(a){
+        return (!secteurId || a.secteurId===secteurId) && (!siteId || a.siteId===siteId);
+      });
+    }
     var sel = document.getElementById('p-acteur');
     sel.innerHTML = '<option value="">Sélectionnez votre nom</option>' + state.acteurs.map(function(a){
       return '<option value="'+a.id+'">'+a.nom+' — '+roleLabel(a.role)+'</option>';
@@ -165,9 +228,29 @@
     var acteur = pendingAction.acteur, type = pendingAction.type;
     var payload = { acteurId: acteur.id, pin: pin, date: todayStr(), heure: nowTime(), lat: geo.lat, lng: geo.lng };
     if(!navigator.onLine){
+      // Hors-ligne : on vérifie le PIN et la géolocalisation localement, avec les
+      // données téléchargées à l'avance, pour donner un retour immédiat à l'acteur.
+      var pinHash = acteur.pinHash;
+      if(!pinHash){
+        var bndl = getOfflineBundle();
+        var trouve = bndl && bndl.acteurs.find(function(x){ return x.id===acteur.id; });
+        if(trouve) pinHash = trouve.pinHash;
+      }
+      if(pinHash && window.dcodeIO && window.dcodeIO.bcrypt){
+        var pinOk = window.dcodeIO.bcrypt.compareSync(pin, pinHash);
+        if(!pinOk){ statusEl.className='status err'; statusEl.textContent='Code PIN incorrect.'; return; }
+        var site = (state.sitesIndex && state.sitesIndex[acteur.siteId]) ||
+          (bndl && bndl.sites.find(function(s){ return s.id===acteur.siteId; }));
+        var erreurPos = verifierPresenceLocale(site, geo.lat, geo.lng);
+        if(erreurPos){ statusEl.className='status err'; statusEl.textContent=erreurPos; return; }
+      } else {
+        statusEl.className='status warn';
+        statusEl.textContent="Aucune donnée hors-ligne sur cet appareil : votre PIN ne peut pas être vérifié tout de suite, le pointage sera mis en attente.";
+      }
       var q = getQueue(); q.push(Object.assign({type:type}, payload)); setQueue(q);
       closePinModal();
-      setPointageStatus('Pointage enregistré hors-ligne — sera synchronisé au retour du réseau (toujours vérifié par rapport au site à ce moment-là).', 'warn');
+      setPointageStatus('Pointage enregistré hors-ligne — sera synchronisé au retour du réseau.', 'warn');
+      renderMesPointages();
       return;
     }
     try{
@@ -218,7 +301,14 @@
         list.map(function(p){
           return '<tr><td>'+p.date.slice(0,10)+'</td><td>'+(p.heureArrivee||'—')+'</td><td>'+(p.heureDepart||'—')+'</td></tr>';
         }).join('') + '</tbody></table>';
-    }catch(e){ el.textContent = "Historique indisponible pour l'instant."; }
+    }catch(e){
+      var enAttente = getQueue().filter(function(it){ return it.acteurId===a.id; });
+      if(!enAttente.length){ el.textContent = "Historique indisponible hors-ligne pour l'instant."; return; }
+      el.innerHTML = '<p class="muted">Hors-ligne — pointages en attente de synchronisation :</p><table><thead><tr><th>Date</th><th>Type</th><th>Heure</th></tr></thead><tbody>' +
+        enAttente.map(function(it){
+          return '<tr><td>'+it.date+'</td><td>'+(it.type==='arrivee'?'Arrivée':'Départ')+'</td><td>'+it.heure+'</td></tr>';
+        }).join('') + '</tbody></table>';
+    }
   }
 
   // ---------- Admin login ----------
@@ -385,6 +475,51 @@
     }catch(e){}
   }
 
+  // ---------- Transfert manuel (export/import de fichier, sans réseau) ----------
+  var btnExporterQueue = document.getElementById('btnExporterQueue');
+  if(btnExporterQueue) btnExporterQueue.addEventListener('click', function(){
+    var statusEl = document.getElementById('transfertStatus');
+    var q = getQueue();
+    if(!q.length){ statusEl.className='status info'; statusEl.textContent='Aucun pointage en attente sur cet appareil.'; return; }
+    var blob = new Blob([JSON.stringify(q, null, 2)], {type:'application/json'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'pointages_epi_'+todayStr()+'_'+Date.now()+'.json';
+    a.click();
+    statusEl.className='status ok'; statusEl.textContent = q.length+' pointage(s) exporté(s). Transportez le fichier téléchargé vers un appareil connecté pour l\'importer.';
+  });
+  var inputImporterQueue = document.getElementById('inputImporterQueue');
+  if(inputImporterQueue) inputImporterQueue.addEventListener('change', function(){
+    var file = this.files && this.files[0];
+    var statusEl = document.getElementById('transfertStatus');
+    if(!file) return;
+    if(!navigator.onLine){ statusEl.className='status err'; statusEl.textContent='Une connexion réseau est nécessaire sur cet appareil pour importer.'; return; }
+    var reader = new FileReader();
+    reader.onload = async function(){
+      var items;
+      try{ items = JSON.parse(reader.result); }catch(e){ statusEl.className='status err'; statusEl.textContent='Fichier invalide.'; return; }
+      if(!Array.isArray(items)){ statusEl.className='status err'; statusEl.textContent='Fichier invalide.'; return; }
+      statusEl.className='status info'; statusEl.textContent='Import en cours… 0/'+items.length;
+      var ok = 0, echecs = 0;
+      for(var i=0;i<items.length;i++){
+        var it = items[i];
+        try{
+          await apiSend('/api/pointages/'+it.type, 'POST', {
+            acteurId: it.acteurId, pin: it.pin, date: it.date, heure: it.heure,
+            lat: it.lat, lng: it.lng, creeHorsLigne: true
+          });
+          ok++;
+        }catch(e){ echecs++; }
+        statusEl.textContent = 'Import en cours… '+(ok+echecs)+'/'+items.length;
+      }
+      statusEl.className = echecs ? 'status warn' : 'status ok';
+      statusEl.textContent = ok+' pointage(s) importé(s) avec succès' + (echecs ? ', '+echecs+' en échec (PIN incorrect, hors zone, ou déjà présents).' : '.');
+      inputImporterQueue.value = '';
+      if(state.token){ loadDashboard(); }
+    };
+    reader.readAsText(file);
+  });
+
   // ---------- Admin: secteurs / sites / acteurs ----------
   document.getElementById('btnAddSecteur').addEventListener('click', async function(){
     var nom = document.getElementById('n-secteur-nom').value.trim();
@@ -474,9 +609,12 @@
   async function init(){
     applyUrlSite();
     renderQueue();
+    renderOfflineStatus();
     await loadSecteurs();
     if(urlSite){
-      var sites = await apiGet('/api/sites');
+      var sites;
+      try{ sites = await apiGet('/api/sites'); }
+      catch(e){ var b0 = getOfflineBundle(); sites = b0 ? b0.sites : []; }
       var site = sites.find(function(s){return s.id===urlSite;});
       if(site){
         document.getElementById('p-secteur').value = site.secteurId;
@@ -489,6 +627,7 @@
     }
     applyAdminSession();
     trySyncQueue();
+    if(navigator.onLine) telechargerPourHorsLigne().catch(function(){});
     if('serviceWorker' in navigator){
       navigator.serviceWorker.register('/sw.js').catch(function(){});
     }

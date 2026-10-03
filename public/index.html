@@ -6,6 +6,7 @@
 <title>Pointage EPI</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="stylesheet" href="/styles.css">
+<script src="/vendor/bcrypt.min.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -41,6 +42,12 @@
         <button class="secondary" id="btnDepart">Enregistrer mon départ</button>
       </div>
       <div id="pointageStatus"></div>
+    </div>
+    <div class="card" id="offlineCard">
+      <h2>Données hors-ligne</h2>
+      <p class="muted">Téléchargez une fois (avec réseau) la liste des acteurs pour pouvoir pointer même sans connexion ensuite.</p>
+      <div id="offlineStatus" class="muted">Aucune donnée hors-ligne enregistrée sur cet appareil.</div>
+      <div style="margin-top:10px;"><button class="secondary small" id="btnTelechargerHorsLigne">Télécharger les données pour hors-ligne</button></div>
     </div>
     <div class="card">
       <h2>Mes derniers pointages</h2>
@@ -134,6 +141,17 @@
         <h2>Session</h2>
         <p class="muted" id="sessionInfo"></p>
         <button class="secondary small" id="btnLogout">Se déconnecter</button>
+      </div>
+
+      <div class="card">
+        <h2>Transfert manuel de pointages (sans réseau)</h2>
+        <p class="muted">Si un appareil n'a jamais de réseau, exportez ses pointages en attente (bouton ci-dessous, sur cet appareil-là) vers un fichier, transportez ce fichier (clé USB, câble, WhatsApp…) jusqu'à un appareil connecté, puis importez-le ici.</p>
+        <div class="row">
+          <button class="secondary small" id="btnExporterQueue">Exporter mes pointages en attente (cet appareil)</button>
+          <label class="secondary small" style="display:inline-block;cursor:pointer;" for="inputImporterQueue">Importer un fichier reçu</label>
+          <input type="file" id="inputImporterQueue" accept="application/json" class="hidden">
+        </div>
+        <div id="transfertStatus"></div>
       </div>
 
       <div class="card hidden" id="adminsCard">
