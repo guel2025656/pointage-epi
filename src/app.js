@@ -10,6 +10,7 @@ const pointageRoutes = require('./routes/pointages');
 const absenceRoutes = require('./routes/absences');
 const reportRoutes = require('./routes/reports');
 const qrcodeRoutes = require('./routes/qrcodes');
+const adminRoutes = require('./routes/admins');
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use('/api/pointages', pointageRoutes);
 app.use('/api/absences', absenceRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/qrcodes', qrcodeRoutes);
+app.use('/api/admins', adminRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

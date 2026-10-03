@@ -3,7 +3,9 @@
   "short_name": "Pointage EPI",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#eeece5",
-  "theme_color": "#185fa5",
-  "icons": []
+  "background_color": "#ffffff",
+  "theme_color": "#1CABE2",
+  "icons": [
+    { "src": "/assets/unicef-logo.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
 }

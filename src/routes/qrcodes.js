@@ -10,7 +10,10 @@ router.get('/site/:siteId.png', async (req, res) => {
   const site = await prisma.site.findUnique({ where: { id: req.params.siteId } });
   if (!site) return res.status(404).send('Site introuvable.');
   const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
-  const url = `${baseUrl}/?site=${site.id}`;
+  let url = `${baseUrl}/?site=${site.id}`;
+  if (site.latitude != null && site.longitude != null) {
+    url += `&lat=${site.latitude}&lng=${site.longitude}`;
+  }
   const png = await QRCode.toBuffer(url, { width: 400, margin: 1 });
   res.setHeader('Content-Type', 'image/png');
   res.send(png);
@@ -29,6 +32,8 @@ router.get('/', requireAdmin, async (req, res) => {
       id: s.id,
       nom: s.nom,
       secteur: s.secteur.nom,
+      latitude: s.latitude,
+      longitude: s.longitude,
       qrUrl: `${baseUrl}/api/qrcodes/site/${s.id}.png`,
       pointageUrl: `${baseUrl}/?site=${s.id}`,
     }))

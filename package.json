@@ -1,9 +1,9 @@
 {
-   "name": "pointage-epi",
-   "version": "1.0.0",
-   "description": "Application de pointage et suivi de presence des acteurs de l'EPI",
-   "main": "src/server.js",
-   "scripts": { 
+  "name": "pointage-epi",
+  "version": "1.0.0",
+  "description": "Application de pointage et suivi de présence des acteurs de l'EPI",
+  "main": "src/server.js",
+  "scripts": {
     "dev": "node src/server.js",
     "postinstall": "prisma generate",
     "start": "prisma migrate deploy && node src/server.js",
@@ -11,15 +11,18 @@
     "prisma:migrate": "prisma migrate deploy",
     "prisma:migrate:dev": "prisma migrate dev",
     "seed": "node prisma/seed.js"
-    },
-    "dependencies": {
-       "@prisma/client": "^5.20.0",
-       "bcryptjs": "^2.4.3",
-       "cors": "^2.8.5",
-       "dotenv": "^16.4.5",
-       "express": "^4.19.2",
-       "jsonwebtoken": "^9.0.2",
-       "prisma": "^5.20.0",
-       "qrcode": "^1.5.4"
-       }
+  },
+  "dependencies": {
+    "@prisma/client": "^5.20.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "prisma": "^5.20.0",
+    "qrcode": "^1.5.4"
+  },
+  "prisma": {
+  "seed": "node prisma/seed.js"
+  }
 }

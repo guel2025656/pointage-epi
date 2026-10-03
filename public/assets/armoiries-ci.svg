@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <rect width="100" height="100" rx="10" fill="#ffffff" stroke="#1CABE2" stroke-width="4"/>
+  <text x="50" y="48" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#0b2638" text-anchor="middle">ARMOIRIES</text>
+  <text x="50" y="64" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#0b2638" text-anchor="middle">CI</text>
+</svg>

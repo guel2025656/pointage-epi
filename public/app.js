@@ -3,6 +3,8 @@
                 admin: JSON.parse(localStorage.getItem('epi_admin') || 'null') };
   var params = new URLSearchParams(location.search);
   var urlSite = params.get('site');
+  var urlLat = params.get('lat');
+  var urlLng = params.get('lng');
 
   function todayStr(){ var d=new Date(); return d.toISOString().slice(0,10); }
   function nowTime(){ var d=new Date(); return d.toTimeString().slice(0,5); }
@@ -60,7 +62,11 @@
           acteurId: it.acteurId, pin: it.pin, date: it.date, heure: it.heure,
           lat: it.lat, lng: it.lng, creeHorsLigne: true
         });
-      }catch(e){ remaining.push(it); }
+      }catch(e){
+        var msg = (e && e.error) || '';
+        // erreur définitive (mauvais PIN, trop loin du site) : on n'insiste pas indéfiniment
+        if(!/PIN|loin|géolocalisation/i.test(msg)) remaining.push(it);
+      }
     }
     setQueue(remaining);
     if(remaining.length < q.length) renderMesPointages();
@@ -68,12 +74,12 @@
   window.addEventListener('online', trySyncQueue);
 
   function getGeoloc(){
-    return new Promise(function(resolve){
-      if(!navigator.geolocation){ resolve({lat:null,lng:null}); return; }
+    return new Promise(function(resolve, reject){
+      if(!navigator.geolocation){ reject(new Error("Votre navigateur ne permet pas la géolocalisation.")); return; }
       navigator.geolocation.getCurrentPosition(
-        function(pos){ resolve({lat: Math.round(pos.coords.latitude*10000)/10000, lng: Math.round(pos.coords.longitude*10000)/10000}); },
-        function(){ resolve({lat:null,lng:null}); },
-        { timeout: 6000 }
+        function(pos){ resolve({lat: pos.coords.latitude, lng: pos.coords.longitude}); },
+        function(){ reject(new Error("Impossible d'obtenir votre position. Activez la géolocalisation (GPS) et autorisez l'accès, puis réessayez.")); },
+        { timeout: 10000, enableHighAccuracy: true }
       );
     });
   }
@@ -148,14 +154,20 @@
     var pin = document.getElementById('pinInput').value.trim();
     var statusEl = document.getElementById('pinModalStatus');
     if(!/^\d{4}$/.test(pin)){ statusEl.className='status err'; statusEl.textContent='Entrez les 4 chiffres de votre code.'; return; }
-    statusEl.className='status info'; statusEl.textContent='Localisation en cours…';
-    var geo = await getGeoloc();
+    statusEl.className='status info'; statusEl.textContent='Localisation en cours… (nécessaire pour confirmer que vous êtes sur le site)';
+    var geo;
+    try{
+      geo = await getGeoloc();
+    }catch(geoErr){
+      statusEl.className='status err'; statusEl.textContent = geoErr.message;
+      return;
+    }
     var acteur = pendingAction.acteur, type = pendingAction.type;
     var payload = { acteurId: acteur.id, pin: pin, date: todayStr(), heure: nowTime(), lat: geo.lat, lng: geo.lng };
     if(!navigator.onLine){
       var q = getQueue(); q.push(Object.assign({type:type}, payload)); setQueue(q);
       closePinModal();
-      setPointageStatus('Pointage enregistré hors-ligne — sera synchronisé au retour du réseau.', 'warn');
+      setPointageStatus('Pointage enregistré hors-ligne — sera synchronisé au retour du réseau (toujours vérifié par rapport au site à ce moment-là).', 'warn');
       return;
     }
     try{
@@ -164,8 +176,9 @@
       setPointageStatus((type==='arrivee'?'Arrivée':'Départ')+' enregistré(e) pour '+acteur.nom+' à '+payload.heure+'.', 'ok');
       renderMesPointages();
     }catch(e){
-      if(e && e.error && /PIN/i.test(e.error)){
-        statusEl.className='status err'; statusEl.textContent = e.error;
+      var msg = (e && e.error) || '';
+      if(/PIN|loin|géolocalisation/i.test(msg)){
+        statusEl.className='status err'; statusEl.textContent = msg;
         return;
       }
       var q2 = getQueue(); q2.push(Object.assign({type:type}, payload)); setQueue(q2);
@@ -237,8 +250,48 @@
     document.getElementById('dashboardContent').classList.toggle('hidden', !logged);
     if(logged){
       document.getElementById('sessionInfo').textContent = state.admin.nom+' — portée : '+(state.admin.portee==='NATIONALE'?'nationale':'secteur');
+      document.getElementById('adminsCard').classList.toggle('hidden', state.admin.portee!=='NATIONALE');
       loadDashboard(); loadAbsences(); loadQrCodes();
+      if(state.admin.portee==='NATIONALE'){ fillSelect('sv-secteur', state.secteurs, 'Choisir'); loadAdmins(); }
     }
+  }
+
+  // ---------- Comptes superviseurs (portée nationale) ----------
+  document.getElementById('sv-portee').addEventListener('change', function(){
+    document.getElementById('sv-secteur-wrap').classList.toggle('hidden', this.value!=='SECTEUR');
+  });
+  document.getElementById('btnAddSuperviseur').addEventListener('click', async function(){
+    var nom = document.getElementById('sv-nom').value.trim();
+    var email = document.getElementById('sv-email').value.trim();
+    var password = document.getElementById('sv-password').value;
+    var portee = document.getElementById('sv-portee').value;
+    var secteurId = document.getElementById('sv-secteur').value;
+    var statusEl = document.getElementById('addSuperviseurStatus');
+    if(!nom || !email || !password){ statusEl.className='status err'; statusEl.textContent='Nom, email et mot de passe sont requis.'; return; }
+    if(portee==='SECTEUR' && !secteurId){ statusEl.className='status err'; statusEl.textContent='Choisissez un secteur pour une portée « secteur ».'; return; }
+    try{
+      await apiSend('/api/admins', 'POST', { nom: nom, email: email, password: password, portee: portee, secteurId: secteurId||null });
+      statusEl.className='status ok'; statusEl.textContent='Compte superviseur créé.';
+      document.getElementById('sv-nom').value=''; document.getElementById('sv-email').value=''; document.getElementById('sv-password').value='';
+      loadAdmins();
+    }catch(e){ statusEl.className='status err'; statusEl.textContent=(e&&e.error)||'Échec de la création.'; }
+  });
+  async function loadAdmins(){
+    try{
+      var admins = await apiGet('/api/admins');
+      var body = document.getElementById('adminsBody');
+      body.innerHTML = admins.length ? admins.map(function(a){
+        var canDelete = a.id !== state.admin.id;
+        return '<tr><td>'+a.nom+'</td><td>'+a.email+'</td><td>'+(a.portee==='NATIONALE'?'Nationale':'Secteur')+'</td><td>'+(a.secteur?a.secteur.nom:'—')+'</td>'+
+          '<td>'+(canDelete?'<button class="secondary small" data-del-admin="'+a.id+'">Révoquer</button>':'')+'</td></tr>';
+      }).join('') : '<tr><td colspan="5" class="muted">Aucun compte.</td></tr>';
+      body.querySelectorAll('[data-del-admin]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          if(!confirm('Révoquer ce compte superviseur ?')) return;
+          try{ await apiSend('/api/admins/'+btn.dataset.delAdmin, 'DELETE'); loadAdmins(); }catch(e){}
+        });
+      });
+    }catch(e){}
   }
 
   // ---------- Dashboard ----------
@@ -311,15 +364,15 @@
     var acteurId = document.getElementById('a-acteur').value;
     var debut = document.getElementById('a-debut').value;
     var fin = document.getElementById('a-fin').value;
-    var motif = document.getElementById('a-motif').value.trim();
+    var dispositions = document.getElementById('a-motif').value.trim();
     var statusEl = document.getElementById('absenceStatus');
-    if(!acteurId || !debut || !motif){ statusEl.className='status err'; statusEl.textContent='Sélectionnez un acteur, une date et un motif.'; return; }
+    if(!acteurId || !debut || !dispositions){ statusEl.className='status err'; statusEl.textContent='Sélectionnez un acteur, une date et les dispositions prises.'; return; }
     try{
-      await apiSend('/api/absences', 'POST', { acteurId: acteurId, dateDebut: debut, dateFin: fin||debut, motif: motif });
-      statusEl.className='status ok'; statusEl.textContent='Demande enregistrée.';
+      await apiSend('/api/absences', 'POST', { acteurId: acteurId, dateDebut: debut, dateFin: fin||debut, dispositions: dispositions });
+      statusEl.className='status ok'; statusEl.textContent='Information envoyée.';
       document.getElementById('a-motif').value='';
       if(state.token) loadAbsences();
-    }catch(e){ statusEl.className='status err'; statusEl.textContent=(e&&e.error)||"Échec de l'enregistrement."; }
+    }catch(e){ statusEl.className='status err'; statusEl.textContent=(e&&e.error)||"Échec de l'envoi."; }
   });
   async function loadAbsences(){
     if(!state.token) return;
@@ -327,21 +380,9 @@
       var absences = await apiGet('/api/absences');
       var body = document.getElementById('absencesBody');
       body.innerHTML = absences.length ? absences.map(function(a){
-        var cls = a.statut==='APPROUVEE'?'ok':(a.statut==='REFUSEE'?'err':'warn');
-        var actions = a.statut==='EN_ATTENTE' ?
-          '<button class="secondary small" data-approve="'+a.id+'">Approuver</button> <button class="secondary small" data-refuse="'+a.id+'">Refuser</button>' : '';
-        return '<tr><td>'+a.acteur.nom+'</td><td>'+a.dateDebut.slice(0,10)+' → '+a.dateFin.slice(0,10)+'</td><td>'+a.motif+'</td><td><span class="badge '+cls+'">'+a.statut+'</span></td><td>'+actions+'</td></tr>';
-      }).join('') : '<tr><td colspan="5" class="muted">Aucune demande.</td></tr>';
-      body.querySelectorAll('[data-approve]').forEach(function(btn){
-        btn.addEventListener('click', function(){ setAbsenceStatut(btn.dataset.approve, 'APPROUVEE'); });
-      });
-      body.querySelectorAll('[data-refuse]').forEach(function(btn){
-        btn.addEventListener('click', function(){ setAbsenceStatut(btn.dataset.refuse, 'REFUSEE'); });
-      });
+        return '<tr><td>'+a.acteur.nom+'</td><td>'+a.dateDebut.slice(0,10)+' → '+a.dateFin.slice(0,10)+'</td><td>'+a.dispositions+'</td></tr>';
+      }).join('') : '<tr><td colspan="3" class="muted">Aucune absence déclarée.</td></tr>';
     }catch(e){}
-  }
-  async function setAbsenceStatut(id, statut){
-    try{ await apiSend('/api/absences/'+id, 'PATCH', { statut: statut }); loadAbsences(); }catch(e){}
   }
 
   // ---------- Admin: secteurs / sites / acteurs ----------
@@ -395,8 +436,27 @@
       var sites = await apiGet('/api/qrcodes');
       var grid = document.getElementById('qrGrid');
       grid.innerHTML = sites.length ? sites.map(function(s){
-        return '<div class="qritem"><img src="'+s.qrUrl+'" alt="QR '+s.nom+'"><div class="name">'+s.nom+'</div><div class="muted">'+s.secteur+'</div></div>';
+        var positionne = s.latitude!=null && s.longitude!=null;
+        var statutPosition = positionne
+          ? '<span class="badge ok">Position définie</span>'
+          : '<span class="badge warn">Position non définie</span>';
+        return '<div class="qritem"><img src="'+s.qrUrl+'" alt="QR '+s.nom+'"><div class="name">'+s.nom+'</div><div class="muted">'+s.secteur+'</div>'+
+          '<div style="margin:6px 0;">'+statutPosition+'</div>'+
+          '<button class="secondary small" data-set-pos="'+s.id+'">Définir la position (être sur place)</button></div>';
       }).join('') : '<div class="muted">Aucun site pour le moment.</div>';
+      grid.querySelectorAll('[data-set-pos]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          btn.disabled = true; btn.textContent = 'Localisation…';
+          try{
+            var geo = await getGeoloc();
+            await apiSend('/api/sites/'+btn.dataset.setPos+'/position', 'PATCH', { latitude: geo.lat, longitude: geo.lng });
+            loadQrCodes();
+          }catch(e){
+            alert((e && e.message) || (e && e.error) || "Impossible d'obtenir la position.");
+            btn.disabled = false; btn.textContent = 'Définir la position (être sur place)';
+          }
+        });
+      });
     }catch(e){}
   }
 
@@ -405,7 +465,9 @@
     if(!urlSite) return;
     var ctx = document.getElementById('siteContext');
     ctx.classList.remove('hidden');
-    ctx.textContent = 'Site sélectionné via QR code. Choisissez votre nom pour pointer.';
+    ctx.textContent = urlLat && urlLng
+      ? 'Site sélectionné via QR code. Vous devez être physiquement sur place pour pouvoir pointer.'
+      : 'Site sélectionné via QR code. Choisissez votre nom pour pointer.';
   }
 
   // ---------- Init ----------

@@ -9,8 +9,14 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Pointage EPI</h1>
-  <p class="sub">Suivi de présence des acteurs de l'Enseignement Par Itinérance</p>
+  <div class="brand-header">
+    <img class="brand-logo" src="/assets/armoiries.png" alt="Armoiries de la Côte d'Ivoire" onerror="this.style.display='none'">
+    <div class="brand-title">
+      <h1>Pointage EPI</h1>
+      <p class="sub">Suivi de présence des acteurs de l'Enseignement Par Itinérance-         Développé par l'IEPP SERY Guélablédé Hervé, Point focal EPI Méagui</p>
+    </div>
+    <img class="brand-logo" src="/assets/unicef-logo.svg" alt="UNICEF" onerror="this.style.display='none'">
+  </div>
 
   <div class="tabs">
     <div class="tab active" data-tab="pointage">Pointage</div>
@@ -85,7 +91,8 @@
   <!-- ABSENCES -->
   <div class="panel" id="panel-absences">
     <div class="card">
-      <h2>Déclarer une absence / demande de justificatif</h2>
+      <h2>Informer d'une autorisation d'absence</h2>
+      <p class="muted">À utiliser uniquement pour une absence déjà autorisée par l'IEPP. Indiquez simplement la période et ce qui a été prévu pour que les enfants ne perdent pas de temps de travail.</p>
       <label>Secteur</label>
       <select id="a-secteur"><option value="">Tous les secteurs</option></select>
       <label>Acteur</label>
@@ -94,17 +101,17 @@
         <div><label>Du</label><input type="date" id="a-debut"></div>
         <div><label>Au</label><input type="date" id="a-fin"></div>
       </div>
-      <label>Motif</label>
-      <textarea id="a-motif" placeholder="Motif de l'absence"></textarea>
-      <div style="margin-top:12px;"><button id="btnAbsence">Enregistrer la demande</button></div>
+      <label>Dispositions prises pour que les enfants ne perdent pas leur temps de travail</label>
+      <textarea id="a-motif" placeholder="Ex. remplacement assuré par..., séances de rattrapage prévues le..."></textarea>
+      <div style="margin-top:12px;"><button id="btnAbsence">Envoyer l'information</button></div>
       <div id="absenceStatus"></div>
     </div>
     <div class="card" id="absencesListCard">
-      <h2>Demandes (superviseurs connectés)</h2>
+      <h2>Absences déclarées (superviseurs connectés)</h2>
       <div class="scroll-x">
         <table>
-          <thead><tr><th>Acteur</th><th>Période</th><th>Motif</th><th>Statut</th><th></th></tr></thead>
-          <tbody id="absencesBody"><tr><td colspan="5" class="muted">Connectez-vous pour voir les demandes.</td></tr></tbody>
+          <thead><tr><th>Acteur</th><th>Période</th><th>Dispositions prises</th></tr></thead>
+          <tbody id="absencesBody"><tr><td colspan="3" class="muted">Connectez-vous pour voir les déclarations.</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -127,6 +134,33 @@
         <h2>Session</h2>
         <p class="muted" id="sessionInfo"></p>
         <button class="secondary small" id="btnLogout">Se déconnecter</button>
+      </div>
+
+      <div class="card hidden" id="adminsCard">
+        <h2>Comptes superviseurs</h2>
+        <p class="muted">Réservé aux comptes à portée nationale.</p>
+        <div class="row">
+          <div><label>Nom</label><input id="sv-nom" placeholder="Nom complet"></div>
+          <div><label>Email</label><input id="sv-email" type="email" placeholder="email@example.com"></div>
+        </div>
+        <div class="row">
+          <div><label>Mot de passe (8 car. min.)</label><input id="sv-password" type="password"></div>
+          <div><label>Portée</label>
+            <select id="sv-portee">
+              <option value="SECTEUR">Secteur</option>
+              <option value="NATIONALE">Nationale</option>
+            </select>
+          </div>
+          <div id="sv-secteur-wrap"><label>Secteur</label><select id="sv-secteur"></select></div>
+        </div>
+        <div style="margin-top:12px;"><button id="btnAddSuperviseur">Créer le compte</button></div>
+        <div id="addSuperviseurStatus"></div>
+        <div class="scroll-x" style="margin-top:14px;">
+          <table>
+            <thead><tr><th>Nom</th><th>Email</th><th>Portée</th><th>Secteur</th><th></th></tr></thead>
+            <tbody id="adminsBody"><tr><td colspan="5" class="muted">Chargement…</td></tr></tbody>
+          </table>
+        </div>
       </div>
 
       <div class="card">
@@ -173,7 +207,7 @@
 
       <div class="card">
         <h2>QR codes de pointage par site</h2>
-        <p class="muted">À afficher ou imprimer sur chaque site — le scan ouvre l'appli avec le site pré-rempli.</p>
+        <p class="muted">À afficher ou imprimer sur chaque site — le scan ouvre l'appli avec le site pré-rempli. Tant qu'un site n'a pas de position définie, le pointage y est accepté sans vérification de présence ; une fois la position définie, il faut être physiquement sur place (dans un rayon de 150 m) pour pointer.</p>
         <div class="qrgrid" id="qrGrid"></div>
       </div>
     </div>

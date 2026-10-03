@@ -1,5 +1,5 @@
 const CACHE = 'pointage-epi-v1';
-const SHELL = ['/', '/styles.css', '/app.js', '/manifest.json'];
+const SHELL = ['/', '/styles.css', '/app.js', '/manifest.json', '/assets/unicef-logo.svg', '/assets/armoiries-ci.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));

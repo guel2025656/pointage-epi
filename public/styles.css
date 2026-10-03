@@ -1,20 +1,21 @@
 :root{
-  --surface-2:#ffffff; --surface-1:#f5f4f0; --surface-0:#eeece5;
-  --text-primary:#1a1a18; --text-secondary:#5f5e5a; --text-muted:#888780;
-  --border:#d9d7cf; --border-strong:#b4b2a9;
-  --accent:#185fa5; --bg-accent:#e6f1fb; --text-accent:#0c447c;
-  --success:#3b6d11; --bg-success:#eaf3de;
-  --danger:#a32d2d; --bg-danger:#fcebeb;
-  --warning:#854f0b; --bg-warning:#faeeda;
+  /* Palette UNICEF : bleu UNICEF (#1CABE2) et blanc dominant */
+  --surface-2:#ffffff; --surface-1:#f2fafd; --surface-0:#e8f6fc;
+  --text-primary:#0b2638; --text-secondary:#4a6472; --text-muted:#7c93a0;
+  --border:#bfe6f4; --border-strong:#8fd2ec;
+  --accent:#1cabe2; --bg-accent:#e3f6fd; --text-accent:#0d7ca6;
+  --success:#2f8f3a; --bg-success:#e8f6ea;
+  --danger:#c23b3b; --bg-danger:#fcebeb;
+  --warning:#b5790b; --bg-warning:#fbf0da;
   --radius:10px;
 }
 @media (prefers-color-scheme: dark){
   :root{
-    --surface-2:#232320; --surface-1:#1c1c1a; --surface-0:#141413;
-    --text-primary:#f1efe8; --text-secondary:#b4b2a9; --text-muted:#888780;
-    --border:#3a3a36; --border-strong:#54534e;
-    --accent:#85b7eb; --bg-accent:#0c2a42; --text-accent:#b5d4f4;
-    --success:#97c459; --bg-success:#1c2a0e;
+    --surface-2:#0d2230; --surface-1:#0a1b26; --surface-0:#07141c;
+    --text-primary:#eaf7fd; --text-secondary:#a9c7d6; --text-muted:#7c93a0;
+    --border:#164258; --border-strong:#1d5872;
+    --accent:#4fc3ec; --bg-accent:#102e3e; --text-accent:#7dd5f2;
+    --success:#6fc97b; --bg-success:#12301a;
     --danger:#f09595; --bg-danger:#3a1414;
     --warning:#efb95c; --bg-warning:#3a2a0a;
   }
@@ -22,7 +23,10 @@
 *{box-sizing:border-box;}
 body{margin:0;background:var(--surface-0);color:var(--text-primary);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
 .wrap{max-width:920px;margin:0 auto;padding:16px 16px 48px;}
-h1{font-size:20px;font-weight:600;margin:4px 0 2px;}
+.brand-header{display:flex;align-items:center;gap:14px;margin-bottom:6px;}
+.brand-logo{height:52px;width:52px;object-fit:contain;flex-shrink:0;border-radius:6px;background:var(--surface-2);}
+.brand-title{flex:1;min-width:0;}
+h1{font-size:20px;font-weight:600;margin:4px 0 2px;color:var(--text-accent);}
 .sub{color:var(--text-secondary);font-size:13px;margin:0 0 16px;}
 .tabs{display:flex;gap:4px;background:var(--surface-1);border-radius:var(--radius);padding:4px;margin-bottom:16px;overflow-x:auto;}
 .tab{flex:1;min-width:max-content;text-align:center;padding:8px 12px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;color:var(--text-secondary);white-space:nowrap;}

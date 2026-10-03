@@ -20,12 +20,6 @@ enum PorteeAdmin {
   SECTEUR
 }
 
-enum StatutAbsence {
-  EN_ATTENTE
-  APPROUVEE
-  REFUSEE
-}
-
 model Secteur {
   id        String   @id @default(cuid())
   nom       String   @unique
@@ -38,6 +32,8 @@ model Secteur {
 model Site {
   id        String   @id @default(cuid())
   nom       String
+  latitude  Float?   // position GPS de référence du site, requise pour exiger la présence sur place
+  longitude Float?
   secteurId String
   secteur   Secteur  @relation(fields: [secteurId], references: [id])
   acteurs   Acteur[]
@@ -94,13 +90,16 @@ model Pointage {
   @@index([siteId, date])
 }
 
+// Autorisation déjà accordée par l'IEPP en dehors de l'application : l'acteur
+// se contente ici d'informer la période et les dispositions prises pour que
+// les enfants ne perdent pas leur temps de travail. Pas de circuit de
+// validation dans l'application.
 model Absence {
-  id         String        @id @default(cuid())
-  acteurId   String
-  acteur     Acteur        @relation(fields: [acteurId], references: [id])
-  dateDebut  DateTime      @db.Date
-  dateFin    DateTime      @db.Date
-  motif      String
-  statut     StatutAbsence @default(EN_ATTENTE)
-  createdAt  DateTime      @default(now())
+  id           String   @id @default(cuid())
+  acteurId     String
+  acteur       Acteur   @relation(fields: [acteurId], references: [id])
+  dateDebut    DateTime @db.Date
+  dateFin      DateTime @db.Date
+  dispositions String
+  createdAt    DateTime @default(now())
 }

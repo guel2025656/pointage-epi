@@ -17,6 +17,37 @@ async function checkPin(acteurId, pin) {
   return ok ? acteur : null;
 }
 
+const RAYON_TOLERANCE_METRES = 150;
+
+// Distance à vol d'oiseau entre deux points GPS (formule de Haversine), en mètres.
+function distanceMetres(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Vérifie que la position transmise est bien sur le site (si le site a une
+// position de référence enregistrée). Retourne null si c'est bon, ou un
+// message d'erreur sinon.
+function verifierPresenceSurSite(site, lat, lng) {
+  if (site.latitude == null || site.longitude == null) {
+    return null; // site pas encore géolocalisé par un administrateur : pas de contrôle possible
+  }
+  if (lat == null || lng == null) {
+    return "La géolocalisation est requise pour pointer sur ce site. Activez-la puis réessayez.";
+  }
+  const distance = distanceMetres(site.latitude, site.longitude, lat, lng);
+  if (distance > RAYON_TOLERANCE_METRES) {
+    return `Vous semblez trop loin du site (${Math.round(distance)} m) pour pointer. Rapprochez-vous puis réessayez.`;
+  }
+  return null;
+}
+
 // POST /api/pointages/arrivee
 router.post('/arrivee', async (req, res) => {
   const { acteurId, pin, date, heure, lat, lng, creeHorsLigne } = req.body || {};
@@ -25,6 +56,10 @@ router.post('/arrivee', async (req, res) => {
   }
   const acteur = await checkPin(acteurId, pin);
   if (!acteur) return res.status(401).json({ error: 'Code PIN incorrect ou acteur inactif.' });
+
+  const site = await prisma.site.findUnique({ where: { id: acteur.siteId } });
+  const erreurPosition = verifierPresenceSurSite(site, lat ?? null, lng ?? null);
+  if (erreurPosition) return res.status(403).json({ error: erreurPosition });
 
   const pointage = await prisma.pointage.upsert({
     where: { acteurId_date: { acteurId, date: todayUtcDate(date) } },
@@ -46,6 +81,10 @@ router.post('/depart', async (req, res) => {
   }
   const acteur = await checkPin(acteurId, pin);
   if (!acteur) return res.status(401).json({ error: 'Code PIN incorrect ou acteur inactif.' });
+
+  const site = await prisma.site.findUnique({ where: { id: acteur.siteId } });
+  const erreurPosition = verifierPresenceSurSite(site, lat ?? null, lng ?? null);
+  if (erreurPosition) return res.status(403).json({ error: erreurPosition });
 
   const pointage = await prisma.pointage.upsert({
     where: { acteurId_date: { acteurId, date: todayUtcDate(date) } },

@@ -81,33 +81,59 @@ directement l'application avec le site pré-rempli.
 
 ## 8. Portée des comptes superviseurs
 
-- `NATIONALE` (ex. DRENAET) : voit tous les secteurs.
+- `NATIONALE` (ex. DRENAET) : voit tous les secteurs, et peut créer/
+  révoquer d'autres comptes superviseurs.
 - `SECTEUR` (ex. CPPP, IEPP) : ne voit que son secteur (`secteurId` sur
   le compte admin).
 
-Créez les comptes superviseurs directement en base pour l'instant (pas
-encore d'écran dédié) :
+Une fois connecté avec le compte admin de démonstration (portée
+nationale), rendez-vous dans l'onglet **Administration → Comptes
+superviseurs** pour créer les comptes CPPP/IEPP (nom, email, mot de
+passe, portée, secteur si applicable), et pour les révoquer si besoin.
+Cette section n'apparaît que pour les comptes à portée nationale.
 
-```bash
-node -e "
-const {PrismaClient} = require('@prisma/client');
-const bcrypt = require('bcryptjs');
-const prisma = new PrismaClient();
-(async () => {
-  const hash = await bcrypt.hash('MOT_DE_PASSE', 10);
-  await prisma.admin.create({ data: {
-    nom: 'Nom du superviseur', email: 'email@example.com',
-    passwordHash: hash, portee: 'SECTEUR', secteurId: 'ID_DU_SECTEUR'
-  }});
-  console.log('Compte créé');
-})();
-"
-```
+## 9. Géolocalisation obligatoire sur site
 
-## 9. Prochaines étapes suggérées
+Depuis l'onglet **Administration → QR codes**, le bouton « Définir la
+position (être sur place) » enregistre la position GPS de référence
+d'un site — à utiliser en étant physiquement sur place. Une fois cette
+position définie :
+- le QR code du site embarque ces coordonnées dans son lien ;
+- tout pointage (arrivée ou départ) sur ce site est comparé à cette
+  position, avec une tolérance de 150 mètres ; au-delà, le pointage
+  est refusé avec un message explicite ;
+- la géolocalisation devient obligatoire pour pointer sur ce site (un
+  acteur qui refuse l'accès à sa position ne peut pas pointer).
 
-- Écran d'administration pour créer les comptes superviseurs sans
-  passer par la ligne de commande.
+Tant qu'un site n'a pas de position définie, le pointage y reste
+accepté sans vérification (utile le temps de déployer progressivement
+sur les 32 sites).
+
+## 10. Absences : simple information, pas de validation
+
+Le circuit d'absence a été simplifié : l'acteur informe l'application
+d'une autorisation d'absence déjà accordée par l'IEPP en dehors de
+l'application, en indiquant la période et les dispositions prises pour
+que les enfants ne perdent pas leur temps de travail (remplacement,
+rattrapage...). Il n'y a plus de bouton « Approuver/Refuser » : c'est
+un journal d'information consultable par les superviseurs, pas un
+circuit d'autorisation.
+
+## 11. Logos et couleurs (UNICEF / Côte d'Ivoire)
+
+L'interface utilise désormais le bleu UNICEF (#1CABE2) sur fond blanc.
+Les emplacements des logos sont en place en haut de l'écran
+(`public/index.html`, bloc `brand-header`), mais les fichiers actuels
+dans `public/assets/unicef-logo.svg` et
+`public/assets/armoiries-ci.svg` sont de simples **gabarits
+temporaires** (un carré bleu et un carré blanc avec du texte) — Claude
+n'a pas de droit à reproduire le logo officiel de l'UNICEF ni les
+armoiries officielles de la Côte d'Ivoire. Remplacez ces deux fichiers
+par les fichiers officiels (mêmes noms, ou ajustez le `src` dans
+`index.html` si vous utilisez un autre format comme `.png`).
+
+## 12. Prochaines étapes suggérées
+
 - Notifications (SMS/e-mail) sur les alertes d'absence répétée.
 - Remontée vers un système DRENA/Ministère si ce besoin apparaît plus
   tard (actuellement : usage interne uniquement, comme demandé).
