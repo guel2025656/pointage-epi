@@ -182,26 +182,38 @@
       </div>
 
       <div class="card">
-        <h2>Ajouter un secteur</h2>
+        <h2>Secteurs</h2>
         <div class="row">
           <input id="n-secteur-nom" placeholder="Nom du secteur">
           <button id="btnAddSecteur">Ajouter</button>
         </div>
         <div id="addSecteurStatus"></div>
+        <div class="scroll-x" style="margin-top:14px;">
+          <table>
+            <thead><tr><th>Nom</th><th></th></tr></thead>
+            <tbody id="secteursBody"><tr><td colspan="2" class="muted">Chargement…</td></tr></tbody>
+          </table>
+        </div>
       </div>
 
       <div class="card">
-        <h2>Ajouter un site</h2>
+        <h2>Sites</h2>
         <div class="row">
           <select id="n-site-secteur"><option value="">Secteur</option></select>
           <input id="n-site-nom" placeholder="Nom du site">
           <button id="btnAddSite">Ajouter</button>
         </div>
         <div id="addSiteStatus"></div>
+        <div class="scroll-x" style="margin-top:14px;">
+          <table>
+            <thead><tr><th>Nom</th><th>Secteur</th><th>Position</th><th></th></tr></thead>
+            <tbody id="sitesBody"><tr><td colspan="4" class="muted">Chargement…</td></tr></tbody>
+          </table>
+        </div>
       </div>
 
       <div class="card">
-        <h2>Ajouter un acteur</h2>
+        <h2>Acteurs</h2>
         <div class="row">
           <div><label>Nom</label><input id="n-nom" placeholder="Nom complet"></div>
           <div><label>Rôle</label>
@@ -221,11 +233,17 @@
         </div>
         <div style="margin-top:12px;"><button id="btnAddActeur">Ajouter</button></div>
         <div id="addActeurStatus"></div>
+        <div class="scroll-x" style="margin-top:14px;">
+          <table>
+            <thead><tr><th>Nom</th><th>Rôle</th><th>Site</th><th>Statut</th><th></th></tr></thead>
+            <tbody id="acteursBody"><tr><td colspan="5" class="muted">Chargement…</td></tr></tbody>
+          </table>
+        </div>
       </div>
 
       <div class="card">
         <h2>QR codes de pointage par site</h2>
-        <p class="muted">À afficher ou imprimer sur chaque site — le scan ouvre l'appli avec le site pré-rempli. Tant qu'un site n'a pas de position définie, le pointage y est accepté sans vérification de présence ; une fois la position définie, il faut être physiquement sur place (dans un rayon de 150 m) pour pointer.</p>
+        <p class="muted">À afficher ou imprimer sur chaque site — le scan ouvre l'appli avec le site pré-rempli. Tant qu'un site n'a pas de position définie, le pointage y est accepté sans vérification de présence ; une fois la position définie, il faut être physiquement sur place (dans un rayon de 150 m) pour pointer. Si vous connaissez déjà les coordonnées GPS d'un site, saisissez-les directement — pas besoin de vous y déplacer.</p>
         <div class="qrgrid" id="qrGrid"></div>
       </div>
     </div>

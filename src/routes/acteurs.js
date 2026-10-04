@@ -51,4 +51,18 @@ router.patch('/:id', requireAdmin, async (req, res) => {
   res.json({ id: acteur.id });
 });
 
+router.delete('/:id', requireAdmin, async (req, res) => {
+  const [nbPointages, nbAbsences] = await Promise.all([
+    prisma.pointage.count({ where: { acteurId: req.params.id } }),
+    prisma.absence.count({ where: { acteurId: req.params.id } }),
+  ]);
+  if (nbPointages > 0 || nbAbsences > 0) {
+    return res.status(409).json({
+      error: "Cet acteur a déjà des pointages ou absences enregistrés : désactivez-le plutôt que de le supprimer, pour garder l'historique.",
+    });
+  }
+  await prisma.acteur.delete({ where: { id: req.params.id } });
+  res.status(204).end();
+});
+
 module.exports = router;

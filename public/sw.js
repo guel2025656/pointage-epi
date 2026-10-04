@@ -1,4 +1,4 @@
-const CACHE = 'pointage-epi-v2';
+const CACHE = 'pointage-epi-v3';
 const SHELL = [
   '/', '/styles.css', '/app.js', '/manifest.json',
   '/vendor/bcrypt.min.js',

@@ -24,8 +24,9 @@ router.post('/', requireAdmin, async (req, res) => {
   }
 });
 
-// PATCH /api/sites/:id/position — enregistre la position GPS de référence du site
-// (à appeler en étant physiquement sur place, depuis l'onglet Administration).
+// PATCH /api/sites/:id/position — enregistre la position GPS de référence du site.
+// Utilisable soit en étant physiquement sur place (bouton géolocalisation),
+// soit en saisissant directement des coordonnées déjà connues.
 router.patch('/:id/position', requireAdmin, async (req, res) => {
   const { latitude, longitude } = req.body || {};
   if (typeof latitude !== 'number' || typeof longitude !== 'number') {
@@ -33,6 +34,30 @@ router.patch('/:id/position', requireAdmin, async (req, res) => {
   }
   const site = await prisma.site.update({ where: { id: req.params.id }, data: { latitude, longitude } });
   res.json({ id: site.id, latitude: site.latitude, longitude: site.longitude });
+});
+
+// PATCH /api/sites/:id — renomme le site et/ou le déplace vers un autre secteur
+router.patch('/:id', requireAdmin, async (req, res) => {
+  const { nom, secteurId } = req.body || {};
+  const data = {};
+  if (nom) data.nom = nom;
+  if (secteurId) data.secteurId = secteurId;
+  if (!Object.keys(data).length) return res.status(400).json({ error: 'Rien à modifier.' });
+  try {
+    const site = await prisma.site.update({ where: { id: req.params.id }, data });
+    res.json(site);
+  } catch (e) {
+    res.status(409).json({ error: 'Ce nom de site existe déjà dans ce secteur.' });
+  }
+});
+
+router.delete('/:id', requireAdmin, async (req, res) => {
+  const nbActeurs = await prisma.acteur.count({ where: { siteId: req.params.id } });
+  if (nbActeurs > 0) {
+    return res.status(409).json({ error: `Impossible de supprimer : ${nbActeurs} acteur(s) sont encore rattachés à ce site.` });
+  }
+  await prisma.site.delete({ where: { id: req.params.id } });
+  res.status(204).end();
 });
 
 module.exports = router;

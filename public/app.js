@@ -342,6 +342,7 @@
       document.getElementById('sessionInfo').textContent = state.admin.nom+' — portée : '+(state.admin.portee==='NATIONALE'?'nationale':'secteur');
       document.getElementById('adminsCard').classList.toggle('hidden', state.admin.portee!=='NATIONALE');
       loadDashboard(); loadAbsences(); loadQrCodes();
+      loadSecteursBody(); loadSitesBody(); loadActeursBody();
       if(state.admin.portee==='NATIONALE'){ fillSelect('sv-secteur', state.secteurs, 'Choisir'); loadAdmins(); }
     }
   }
@@ -530,8 +531,36 @@
       statusEl.className='status ok'; statusEl.textContent='Secteur ajouté.';
       document.getElementById('n-secteur-nom').value='';
       await loadSecteurs();
+      loadSecteursBody();
     }catch(e){ statusEl.className='status err'; statusEl.textContent=(e&&e.error)||'Échec.'; }
   });
+  async function loadSecteursBody(){
+    if(!state.token) return;
+    try{
+      var secteurs = await apiGet('/api/secteurs');
+      var body = document.getElementById('secteursBody');
+      body.innerHTML = secteurs.length ? secteurs.map(function(s){
+        return '<tr><td>'+s.nom+'</td><td>'+
+          '<button class="secondary small" data-rename-secteur="'+s.id+'" data-nom="'+s.nom+'">Renommer</button> '+
+          '<button class="secondary small" data-del-secteur="'+s.id+'">Supprimer</button></td></tr>';
+      }).join('') : '<tr><td colspan="2" class="muted">Aucun secteur.</td></tr>';
+      body.querySelectorAll('[data-rename-secteur]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var nouveauNom = prompt('Nouveau nom du secteur :', btn.dataset.nom);
+          if(!nouveauNom || !nouveauNom.trim()) return;
+          try{ await apiSend('/api/secteurs/'+btn.dataset.renameSecteur, 'PATCH', { nom: nouveauNom.trim() }); await loadSecteurs(); loadSecteursBody(); loadSitesBody(); }
+          catch(e){ alert((e&&e.error)||'Échec.'); }
+        });
+      });
+      body.querySelectorAll('[data-del-secteur]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          if(!confirm('Supprimer ce secteur ?')) return;
+          try{ await apiSend('/api/secteurs/'+btn.dataset.delSecteur, 'DELETE'); await loadSecteurs(); loadSecteursBody(); }
+          catch(e){ alert((e&&e.error)||'Échec.'); }
+        });
+      });
+    }catch(e){}
+  }
   document.getElementById('n-site-secteur').addEventListener('change', function(){}); // placeholder for symmetry
   document.getElementById('btnAddSite').addEventListener('click', async function(){
     var secteurId = document.getElementById('n-site-secteur').value;
@@ -542,9 +571,54 @@
       await apiSend('/api/sites', 'POST', { nom: nom, secteurId: secteurId });
       statusEl.className='status ok'; statusEl.textContent='Site ajouté.';
       document.getElementById('n-site-nom').value='';
-      loadQrCodes();
+      loadQrCodes(); loadSitesBody();
     }catch(e){ statusEl.className='status err'; statusEl.textContent=(e&&e.error)||'Échec.'; }
   });
+  async function loadSitesBody(){
+    if(!state.token) return;
+    try{
+      var sites = await apiGet('/api/sites');
+      var body = document.getElementById('sitesBody');
+      body.innerHTML = sites.length ? sites.map(function(s){
+        var positionne = s.latitude!=null && s.longitude!=null;
+        var posTxt = positionne ? s.latitude.toFixed(5)+', '+s.longitude.toFixed(5) : 'Non définie';
+        return '<tr><td>'+s.nom+'</td><td>'+(s.secteur?s.secteur.nom:'—')+'</td><td>'+posTxt+'</td>'+
+          '<td style="min-width:260px;">'+
+          '<button class="secondary small" data-rename-site="'+s.id+'" data-nom="'+s.nom+'">Renommer</button> '+
+          '<button class="secondary small" data-del-site="'+s.id+'">Supprimer</button><br>'+
+          '<input type="number" step="any" placeholder="Latitude" class="pos-lat" data-site="'+s.id+'" style="width:95px;margin-top:4px;">'+
+          '<input type="number" step="any" placeholder="Longitude" class="pos-lng" data-site="'+s.id+'" style="width:95px;">'+
+          '<button class="secondary small" data-save-pos="'+s.id+'">Enregistrer position</button>'+
+          '</td></tr>';
+      }).join('') : '<tr><td colspan="4" class="muted">Aucun site.</td></tr>';
+      body.querySelectorAll('[data-rename-site]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var nouveauNom = prompt('Nouveau nom du site :', btn.dataset.nom);
+          if(!nouveauNom || !nouveauNom.trim()) return;
+          try{ await apiSend('/api/sites/'+btn.dataset.renameSite, 'PATCH', { nom: nouveauNom.trim() }); loadSitesBody(); loadQrCodes(); }
+          catch(e){ alert((e&&e.error)||'Échec.'); }
+        });
+      });
+      body.querySelectorAll('[data-del-site]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          if(!confirm('Supprimer ce site ?')) return;
+          try{ await apiSend('/api/sites/'+btn.dataset.delSite, 'DELETE'); loadSitesBody(); loadQrCodes(); }
+          catch(e){ alert((e&&e.error)||'Échec.'); }
+        });
+      });
+      body.querySelectorAll('[data-save-pos]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var id = btn.dataset.savePos;
+          var row = btn.closest('tr');
+          var lat = parseFloat(row.querySelector('.pos-lat[data-site="'+id+'"]').value);
+          var lng = parseFloat(row.querySelector('.pos-lng[data-site="'+id+'"]').value);
+          if(isNaN(lat) || isNaN(lng)){ alert('Entrez une latitude et une longitude valides.'); return; }
+          try{ await apiSend('/api/sites/'+id+'/position', 'PATCH', { latitude: lat, longitude: lng }); loadSitesBody(); loadQrCodes(); }
+          catch(e){ alert((e&&e.error)||'Échec.'); }
+        });
+      });
+    }catch(e){}
+  }
   document.getElementById('n-secteur').addEventListener('change', async function(){
     await loadSites(this.value, 'n-site', 'Choisir');
   });
@@ -562,8 +636,45 @@
       await apiSend('/api/acteurs', 'POST', { nom: nom, role: role, secteurId: secteurId, siteId: siteId, pin: pin });
       statusEl.className='status ok'; statusEl.textContent='Acteur ajouté.';
       document.getElementById('n-nom').value=''; document.getElementById('n-pin').value='';
+      loadActeursBody();
     }catch(e){ statusEl.className='status err'; statusEl.textContent=(e&&e.error)||"Échec de l'ajout."; }
   });
+  async function loadActeursBody(){
+    if(!state.token) return;
+    try{
+      var acteurs = await apiGet('/api/acteurs');
+      var body = document.getElementById('acteursBody');
+      body.innerHTML = acteurs.length ? acteurs.map(function(a){
+        return '<tr><td>'+a.nom+'</td><td>'+roleLabel(a.role)+'</td><td>'+(a.site?a.site.nom:'—')+'</td>'+
+          '<td>'+(a.actif?'<span class="badge ok">Actif</span>':'<span class="badge warn">Inactif</span>')+'</td>'+
+          '<td><button class="secondary small" data-rename-acteur="'+a.id+'" data-nom="'+a.nom+'">Renommer</button> '+
+          '<button class="secondary small" data-toggle-acteur="'+a.id+'" data-actif="'+a.actif+'">'+(a.actif?'Désactiver':'Activer')+'</button> '+
+          '<button class="secondary small" data-del-acteur="'+a.id+'">Supprimer</button></td></tr>';
+      }).join('') : '<tr><td colspan="5" class="muted">Aucun acteur.</td></tr>';
+      body.querySelectorAll('[data-rename-acteur]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var nouveauNom = prompt('Nouveau nom :', btn.dataset.nom);
+          if(!nouveauNom || !nouveauNom.trim()) return;
+          try{ await apiSend('/api/acteurs/'+btn.dataset.renameActeur, 'PATCH', { nom: nouveauNom.trim() }); loadActeursBody(); }
+          catch(e){ alert((e&&e.error)||'Échec.'); }
+        });
+      });
+      body.querySelectorAll('[data-toggle-acteur]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var actif = btn.dataset.actif === 'true';
+          try{ await apiSend('/api/acteurs/'+btn.dataset.toggleActeur, 'PATCH', { actif: !actif }); loadActeursBody(); }
+          catch(e){ alert((e&&e.error)||'Échec.'); }
+        });
+      });
+      body.querySelectorAll('[data-del-acteur]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          if(!confirm('Supprimer définitivement cet acteur ?')) return;
+          try{ await apiSend('/api/acteurs/'+btn.dataset.delActeur, 'DELETE'); loadActeursBody(); }
+          catch(e){ alert((e&&e.error)||'Échec.'); }
+        });
+      });
+    }catch(e){}
+  }
 
   async function loadQrCodes(){
     if(!state.token) return;

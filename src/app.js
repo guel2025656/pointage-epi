@@ -31,6 +31,14 @@ app.use('/api/offline', offlineRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
+// Le service worker ne doit jamais être mis en cache par le navigateur, sinon
+// les mises à jour de l'application mettent très longtemps à atteindre les
+// appareils déjà installés en PWA.
+app.get('/sw.js', (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, '..', 'public', 'sw.js'));
+});
+
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
