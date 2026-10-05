@@ -14,13 +14,23 @@
     if(state.token) h['Authorization'] = 'Bearer '+state.token;
     return h;
   }
+  function handleSessionExpiree(){
+    if(!state.token) return;
+    state.token = null; state.admin = null;
+    localStorage.removeItem('epi_token'); localStorage.removeItem('epi_admin');
+    applyAdminSession();
+    var statusEl = document.getElementById('loginStatus');
+    if(statusEl){ statusEl.className='status warn'; statusEl.textContent='Votre session a expiré, reconnectez-vous.'; }
+  }
   async function apiGet(path){
     var res = await fetch(path, { headers: authHeaders() });
+    if(res.status===401 && path.indexOf('/api/auth/')!==0){ handleSessionExpiree(); }
     if(!res.ok) throw await res.json().catch(function(){return {error:'Erreur réseau'};});
     return res.json();
   }
   async function apiSend(path, method, body){
     var res = await fetch(path, { method: method, headers: authHeaders(), body: JSON.stringify(body||{}) });
+    if(res.status===401 && path.indexOf('/api/auth/')!==0){ handleSessionExpiree(); }
     var data = await res.json().catch(function(){return {};});
     if(!res.ok) throw data;
     return data;
