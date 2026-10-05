@@ -172,7 +172,16 @@
     fillSelect(targetId, sites, placeholder);
     return sites;
   }
-  async function loadActeurs(secteurId, siteId){
+  // "Rubriques" proposées : personnel d'encadrement / enseignants itinérants / volontaires.
+  var CATEGORIES = {
+    ENCADREMENT: ['CANEF', 'CPPP', 'IEPP'],
+    ENSEIGNANTS: ['ENSEIGNANT_ITINERANT'],
+    VOLONTAIRES: ['VOLONTAIRE'],
+  };
+  function rolesDeCategorie(categorie){ return CATEGORIES[categorie] || null; }
+
+  async function loadActeurs(secteurId, siteId, categorie){
+    var roles = rolesDeCategorie(categorie);
     var qs = [];
     if(secteurId) qs.push('secteurId='+secteurId);
     if(siteId) qs.push('siteId='+siteId);
@@ -185,6 +194,7 @@
         return (!secteurId || a.secteurId===secteurId) && (!siteId || a.siteId===siteId);
       });
     }
+    if(roles) state.acteurs = state.acteurs.filter(function(a){ return roles.indexOf(a.role)!==-1; });
     var sel = document.getElementById('p-acteur');
     sel.innerHTML = '<option value="">Sélectionnez votre nom</option>' + state.acteurs.map(function(a){
       return '<option value="'+a.id+'">'+a.nom+' — '+roleLabel(a.role)+'</option>';
@@ -194,21 +204,30 @@
     return {ENSEIGNANT_ITINERANT:'Enseignant itinérant',VOLONTAIRE:'Volontaire',CANEF:'CANEF',CPPP:'CPPP',IEPP:'IEPP'}[r]||r;
   }
 
+  document.getElementById('p-categorie').addEventListener('change', function(){
+    loadActeurs(document.getElementById('p-secteur').value, document.getElementById('p-site').value, this.value);
+  });
   document.getElementById('p-secteur').addEventListener('change', async function(){
     await loadSites(this.value, 'p-site', 'Tous les sites');
-    await loadActeurs(this.value, document.getElementById('p-site').value);
+    await loadActeurs(this.value, document.getElementById('p-site').value, document.getElementById('p-categorie').value);
   });
   document.getElementById('p-site').addEventListener('change', function(){
-    loadActeurs(document.getElementById('p-secteur').value, this.value);
+    loadActeurs(document.getElementById('p-secteur').value, this.value, document.getElementById('p-categorie').value);
   });
-  document.getElementById('a-secteur').addEventListener('change', async function(){
-    var sites = await loadSites(this.value, 'a-acteur', 'Sélectionnez un acteur'); // temp, replaced below
-    var acteurs = await apiGet('/api/acteurs'+(this.value?('?secteurId='+this.value):''));
+  async function rafraichirActeursAbsences(){
+    var secteurId = document.getElementById('a-secteur').value;
+    var roles = rolesDeCategorie(document.getElementById('a-categorie').value);
+    var acteurs;
+    try{ acteurs = await apiGet('/api/acteurs'+(secteurId?('?secteurId='+secteurId):'')); }
+    catch(e){ var b = getOfflineBundle(); acteurs = b ? b.acteurs.filter(function(a){ return !secteurId || a.secteurId===secteurId; }) : []; }
+    if(roles) acteurs = acteurs.filter(function(a){ return roles.indexOf(a.role)!==-1; });
     var sel = document.getElementById('a-acteur');
     sel.innerHTML = '<option value="">Sélectionnez un acteur</option>' + acteurs.map(function(a){
       return '<option value="'+a.id+'">'+a.nom+' — '+roleLabel(a.role)+'</option>';
     }).join('');
-  });
+  }
+  document.getElementById('a-categorie').addEventListener('change', rafraichirActeursAbsences);
+  document.getElementById('a-secteur').addEventListener('change', rafraichirActeursAbsences);
 
   // ---------- PIN modal ----------
   var pendingAction = null;
@@ -396,6 +415,7 @@
   }
 
   // ---------- Dashboard ----------
+  document.getElementById('d-categorie').addEventListener('change', loadDashboard);
   document.getElementById('d-secteur').addEventListener('change', async function(){
     await loadSites(this.value, 'd-site', 'Tous');
     loadDashboard();
@@ -410,17 +430,20 @@
     var siteId = document.getElementById('d-site').value;
     var from = document.getElementById('d-from').value;
     var to = document.getElementById('d-to').value;
+    var roles = rolesDeCategorie(document.getElementById('d-categorie').value);
     var qs = [];
     if(secteurId) qs.push('secteurId='+secteurId);
     if(siteId) qs.push('siteId='+siteId);
     if(from) qs.push('from='+from);
     if(to) qs.push('to='+to);
+    if(roles) qs.push('roles='+roles.join(','));
     var query = qs.length ? ('?'+qs.join('&')) : '';
 
     try{
       var pointages = await apiGet('/api/pointages'+query);
       var taux = await apiGet('/api/reports/taux-presence'+(secteurId?('?secteurId='+secteurId):''));
       var alertes = await apiGet('/api/reports/alertes'+(secteurId?('?secteurId='+secteurId):''));
+      if(roles) alertes = alertes.filter(function(al){ return roles.indexOf(al.role)!==-1; });
 
       document.getElementById('statCards').innerHTML = [
         statCard(taux.presents+'/'+taux.totalActeurs, "Présents aujourd'hui"),
@@ -448,11 +471,13 @@
     var siteId = document.getElementById('d-site').value;
     var from = document.getElementById('d-from').value;
     var to = document.getElementById('d-to').value;
+    var roles = rolesDeCategorie(document.getElementById('d-categorie').value);
     var qs = [];
     if(secteurId) qs.push('secteurId='+secteurId);
     if(siteId) qs.push('siteId='+siteId);
     if(from) qs.push('from='+from);
     if(to) qs.push('to='+to);
+    if(roles) qs.push('roles='+roles.join(','));
     var url = '/api/reports/csv'+(qs.length?('?'+qs.join('&')):'');
     fetch(url, { headers: authHeaders() }).then(function(res){ return res.blob(); }).then(function(blob){
       var a = document.createElement('a');
@@ -649,18 +674,48 @@
       loadActeursBody();
     }catch(e){ statusEl.className='status err'; statusEl.textContent=(e&&e.error)||"Échec de l'ajout."; }
   });
+  var CATEGORIE_LABEL = { ENCADREMENT: "Personnel d'encadrement", ENSEIGNANTS: 'Enseignants itinérants', VOLONTAIRES: 'Volontaires' };
+  function categorieDeRole(role){
+    for(var c in CATEGORIES){ if(CATEGORIES[c].indexOf(role)!==-1) return c; }
+    return 'AUTRE';
+  }
   async function loadActeursBody(){
     if(!state.token) return;
     try{
       var acteurs = await apiGet('/api/acteurs');
       var body = document.getElementById('acteursBody');
-      body.innerHTML = acteurs.length ? acteurs.map(function(a){
-        return '<tr><td>'+a.nom+'</td><td>'+roleLabel(a.role)+'</td><td>'+(a.site?a.site.nom:'—')+'</td>'+
-          '<td>'+(a.actif?'<span class="badge ok">Actif</span>':'<span class="badge warn">Inactif</span>')+'</td>'+
-          '<td><button class="secondary small" data-rename-acteur="'+a.id+'" data-nom="'+a.nom+'">Renommer</button> '+
-          '<button class="secondary small" data-toggle-acteur="'+a.id+'" data-actif="'+a.actif+'">'+(a.actif?'Désactiver':'Activer')+'</button> '+
-          '<button class="secondary small" data-del-acteur="'+a.id+'">Supprimer</button></td></tr>';
-      }).join('') : '<tr><td colspan="5" class="muted">Aucun acteur.</td></tr>';
+      if(!acteurs.length){ body.innerHTML = '<tr><td colspan="5" class="muted">Aucun acteur.</td></tr>'; return; }
+      // Regroupement : catégorie (encadrement / enseignants / volontaires) → secteur pédagogique → site.
+      var groupes = {};
+      acteurs.forEach(function(a){
+        var cat = categorieDeRole(a.role);
+        var secteurNom = a.secteur ? a.secteur.nom : 'Sans secteur';
+        var siteNom = a.site ? a.site.nom : 'Sans site';
+        groupes[cat] = groupes[cat] || {};
+        groupes[cat][secteurNom] = groupes[cat][secteurNom] || {};
+        groupes[cat][secteurNom][siteNom] = groupes[cat][secteurNom][siteNom] || [];
+        groupes[cat][secteurNom][siteNom].push(a);
+      });
+      var ordreCategories = ['ENCADREMENT', 'ENSEIGNANTS', 'VOLONTAIRES', 'AUTRE'];
+      var html = '';
+      ordreCategories.forEach(function(cat){
+        if(!groupes[cat]) return;
+        html += '<tr><td colspan="5" style="background:var(--surface-1);font-weight:700;">'+(CATEGORIE_LABEL[cat]||cat)+'</td></tr>';
+        Object.keys(groupes[cat]).sort().forEach(function(secteurNom){
+          html += '<tr><td colspan="5" style="padding-left:20px;font-weight:600;color:var(--text-secondary);">'+secteurNom+'</td></tr>';
+          Object.keys(groupes[cat][secteurNom]).sort().forEach(function(siteNom){
+            html += '<tr><td colspan="5" style="padding-left:36px;font-style:italic;color:var(--text-secondary);">'+siteNom+'</td></tr>';
+            groupes[cat][secteurNom][siteNom].forEach(function(a){
+              html += '<tr><td style="padding-left:48px;">'+a.nom+'</td><td>'+roleLabel(a.role)+'</td><td>'+siteNom+'</td>'+
+                '<td>'+(a.actif?'<span class="badge ok">Actif</span>':'<span class="badge warn">Inactif</span>')+'</td>'+
+                '<td><button class="secondary small" data-rename-acteur="'+a.id+'" data-nom="'+a.nom+'">Renommer</button> '+
+                '<button class="secondary small" data-toggle-acteur="'+a.id+'" data-actif="'+a.actif+'">'+(a.actif?'Désactiver':'Activer')+'</button> '+
+                '<button class="secondary small" data-del-acteur="'+a.id+'">Supprimer</button></td></tr>';
+            });
+          });
+        });
+      });
+      body.innerHTML = html;
       body.querySelectorAll('[data-rename-acteur]').forEach(function(btn){
         btn.addEventListener('click', async function(){
           var nouveauNom = prompt('Nouveau nom :', btn.dataset.nom);

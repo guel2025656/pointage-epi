@@ -14,7 +14,7 @@
     <img class="brand-logo" src="/assets/armoiries.png" alt="Armoiries de la Côte d'Ivoire" onerror="this.style.display='none'">
     <div class="brand-title">
       <h1>Pointage EPI</h1>
-      <p class="sub">Suivi de présence des acteurs de l'EPI-         Développé par l'IEPP SERY Guélablédé Hervé, Point focal Méagui</p>
+      <p class="sub">Suivi de présence des acteurs de l'EPI  - IEPP SERY Guélablédé Hervé, Point focal Méagui (0757555667)</p>
     </div>
     <img class="brand-logo" src="/assets/unicef-logo.svg" alt="UNICEF" onerror="this.style.display='none'">
   </div>
@@ -31,7 +31,14 @@
     <div class="card">
       <h2>Se pointer</h2>
       <div id="siteContext" class="status info hidden"></div>
-      <label>Secteur</label>
+      <label>Catégorie</label>
+      <select id="p-categorie">
+        <option value="">Choisir une catégorie</option>
+        <option value="ENCADREMENT">Personnel d'encadrement</option>
+        <option value="ENSEIGNANTS">Enseignants itinérants</option>
+        <option value="VOLONTAIRES">Volontaires</option>
+      </select>
+      <label>Secteur pédagogique</label>
       <select id="p-secteur"><option value="">Tous les secteurs</option></select>
       <label>Site</label>
       <select id="p-site"><option value="">Tous les sites</option></select>
@@ -69,8 +76,16 @@
       <div class="card">
         <h2>Filtres</h2>
         <div class="row">
-          <div><label>Secteur</label><select id="d-secteur"><option value="">Tous</option></select></div>
+          <div><label>Catégorie</label><select id="d-categorie">
+            <option value="">Toutes</option>
+            <option value="ENCADREMENT">Personnel d'encadrement</option>
+            <option value="ENSEIGNANTS">Enseignants itinérants</option>
+            <option value="VOLONTAIRES">Volontaires</option>
+          </select></div>
+          <div><label>Secteur pédagogique</label><select id="d-secteur"><option value="">Tous</option></select></div>
           <div><label>Site</label><select id="d-site"><option value="">Tous</option></select></div>
+        </div>
+        <div class="row" style="margin-top:10px;">
           <div><label>Depuis le</label><input type="date" id="d-from"></div>
           <div><label>Jusqu'au</label><input type="date" id="d-to"></div>
         </div>
@@ -100,7 +115,14 @@
     <div class="card">
       <h2>Informer d'une autorisation d'absence</h2>
       <p class="muted">À utiliser uniquement pour une absence déjà autorisée par l'IEPP. Indiquez simplement la période et ce qui a été prévu pour que les enfants ne perdent pas de temps de travail.</p>
-      <label>Secteur</label>
+      <label>Catégorie</label>
+      <select id="a-categorie">
+        <option value="">Toutes</option>
+        <option value="ENCADREMENT">Personnel d'encadrement</option>
+        <option value="ENSEIGNANTS">Enseignants itinérants</option>
+        <option value="VOLONTAIRES">Volontaires</option>
+      </select>
+      <label>Secteur pédagogique</label>
       <select id="a-secteur"><option value="">Tous les secteurs</option></select>
       <label>Acteur</label>
       <select id="a-acteur"><option value="">Sélectionnez un acteur</option></select>
