@@ -6,10 +6,11 @@ const router = express.Router();
 
 // GET /api/reports/csv?secteurId=&siteId=&from=&to=
 router.get('/csv', requireAdmin, async (req, res) => {
-  const { secteurId, siteId, from, to } = req.query;
+  const { secteurId, siteId, from, to, roles } = req.query;
   const where = { acteur: { ...scopeFilter(req) } };
   if (secteurId) where.acteur.secteurId = secteurId;
   if (siteId) where.siteId = siteId;
+  if (roles) where.acteur.role = { in: roles.split(',') };
   if (from || to) {
     where.date = {};
     if (from) where.date.gte = new Date(from + 'T00:00:00.000Z');

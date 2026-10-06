@@ -44,6 +44,10 @@
       <select id="p-site"><option value="">Tous les sites</option></select>
       <label>Votre nom</label>
       <select id="p-acteur"><option value="">Sélectionnez votre nom</option></select>
+      <div id="siteDuJourWrap" class="hidden">
+        <label>Site où vous pointez aujourd'hui</label>
+        <select id="p-site-du-jour"></select>
+      </div>
       <div class="row" style="margin-top:14px;">
         <button id="btnArrivee">Enregistrer mon arrivée</button>
         <button class="secondary" id="btnDepart">Enregistrer mon départ</button>
@@ -250,9 +254,14 @@
         </div>
         <div class="row">
           <div><label>Secteur</label><select id="n-secteur"></select></div>
-          <div><label>Site</label><select id="n-site"></select></div>
+          <div id="n-site-wrap"><label>Site</label><select id="n-site"></select></div>
           <div><label>Code PIN (4 chiffres)</label><input id="n-pin" maxlength="4" placeholder="0000"></div>
         </div>
+        <div id="n-sites-affectes-wrap" class="hidden" style="margin-top:8px;">
+          <label>Sites affectés (jusqu'à 4, dans le secteur choisi)</label>
+          <div id="n-sites-affectes-list" class="row"></div>
+        </div>
+        <p id="n-site-info" class="muted hidden" style="margin-top:8px;"></p>
         <div style="margin-top:12px;"><button id="btnAddActeur">Ajouter</button></div>
         <div id="addActeurStatus"></div>
         <div class="scroll-x" style="margin-top:14px;">

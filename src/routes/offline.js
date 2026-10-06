@@ -16,7 +16,10 @@ router.get('/bundle', async (req, res) => {
     }),
     prisma.acteur.findMany({
       where: { actif: true },
-      select: { id: true, nom: true, role: true, secteurId: true, siteId: true, pin: true },
+      select: {
+        id: true, nom: true, role: true, secteurId: true, siteId: true, pin: true,
+        sitesAffectes: { select: { id: true } },
+      },
     }),
   ]);
   res.json({
@@ -25,6 +28,7 @@ router.get('/bundle', async (req, res) => {
     sites,
     acteurs: acteurs.map((a) => ({
       id: a.id, nom: a.nom, role: a.role, secteurId: a.secteurId, siteId: a.siteId,
+      sitesAffectesIds: a.sitesAffectes.map((s) => s.id),
       pinHash: a.pin,
     })),
   });

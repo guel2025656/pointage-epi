@@ -232,7 +232,7 @@
   // ---------- PIN modal ----------
   var pendingAction = null;
   function openPinModal(acteur, type){
-    pendingAction = { acteur: acteur, type: type };
+    pendingAction = { acteur: acteur, type: type, siteId: siteDuJourChoisi(acteur) };
     document.getElementById('pinModalActeur').textContent = acteur.nom+' — '+(type==='arrivee'?'Enregistrer mon arrivée':'Enregistrer mon départ');
     document.getElementById('pinInput').value = '';
     document.getElementById('pinModalStatus').innerHTML = '';
@@ -254,8 +254,8 @@
       statusEl.className='status err'; statusEl.textContent = geoErr.message;
       return;
     }
-    var acteur = pendingAction.acteur, type = pendingAction.type;
-    var payload = { acteurId: acteur.id, pin: pin, date: todayStr(), heure: nowTime(), lat: geo.lat, lng: geo.lng };
+    var acteur = pendingAction.acteur, type = pendingAction.type, siteChoisi = pendingAction.siteId;
+    var payload = { acteurId: acteur.id, pin: pin, date: todayStr(), heure: nowTime(), lat: geo.lat, lng: geo.lng, siteId: siteChoisi };
     if(!navigator.onLine){
       // Hors-ligne : on vérifie le PIN et la géolocalisation localement, avec les
       // données téléchargées à l'avance, pour donner un retour immédiat à l'acteur.
@@ -268,8 +268,8 @@
       if(pinHash && window.dcodeIO && window.dcodeIO.bcrypt){
         var pinOk = window.dcodeIO.bcrypt.compareSync(pin, pinHash);
         if(!pinOk){ statusEl.className='status err'; statusEl.textContent='Code PIN incorrect.'; return; }
-        var site = (state.sitesIndex && state.sitesIndex[acteur.siteId]) ||
-          (bndl && bndl.sites.find(function(s){ return s.id===acteur.siteId; }));
+        var site = (state.sitesIndex && state.sitesIndex[siteChoisi]) ||
+          (bndl && bndl.sites.find(function(s){ return s.id===siteChoisi; }));
         var erreurPos = verifierPresenceLocale(site, geo.lat, geo.lng);
         if(erreurPos){ statusEl.className='status err'; statusEl.textContent=erreurPos; return; }
       } else {
@@ -307,17 +307,52 @@
     var id = document.getElementById('p-acteur').value;
     return state.acteurs.find(function(a){return a.id===id;});
   }
+  // Détermine la liste des sites où un acteur peut pointer, selon son rôle.
+  async function sitesPourActeur(a){
+    if(a.role==='VOLONTAIRE') return [];
+    if(a.role==='ENSEIGNANT_ITINERANT'){
+      if(a.sitesAffectes) return a.sitesAffectes;
+      if(a.sitesAffectesIds){
+        var b = getOfflineBundle();
+        var tousB = b ? b.sites : [];
+        return tousB.filter(function(s){ return a.sitesAffectesIds.indexOf(s.id)!==-1; });
+      }
+      return [];
+    }
+    var tous;
+    try{ tous = await apiGet('/api/sites'); }
+    catch(e){ var bb = getOfflineBundle(); tous = bb ? bb.sites : []; }
+    if(a.role==='CPPP') return tous.filter(function(s){ return s.secteurId===a.secteurId; });
+    return tous; // CANEF / IEPP : tous les sites
+  }
+  async function majSiteDuJour(){
+    var a = currentActeur();
+    var wrap = document.getElementById('siteDuJourWrap');
+    var sel = document.getElementById('p-site-du-jour');
+    if(!a || a.role==='VOLONTAIRE'){ wrap.classList.add('hidden'); sel.innerHTML=''; return; }
+    var sites = await sitesPourActeur(a);
+    sel.innerHTML = sites.map(function(s){ return '<option value="'+s.id+'">'+s.nom+'</option>'; }).join('');
+    var siteFiltre = document.getElementById('p-site').value;
+    if(siteFiltre && sites.some(function(s){return s.id===siteFiltre;})) sel.value = siteFiltre;
+    wrap.classList.remove('hidden');
+  }
+  function siteDuJourChoisi(a){
+    if(a.role==='VOLONTAIRE') return a.siteId;
+    return document.getElementById('p-site-du-jour').value || null;
+  }
   document.getElementById('btnArrivee').addEventListener('click', function(){
     var a = currentActeur();
     if(!a){ setPointageStatus('Sélectionnez votre nom avant de pointer.', 'err'); return; }
+    if(a.role!=='VOLONTAIRE' && !siteDuJourChoisi(a)){ setPointageStatus('Choisissez le site où vous pointez aujourd\'hui.', 'err'); return; }
     openPinModal(a, 'arrivee');
   });
   document.getElementById('btnDepart').addEventListener('click', function(){
     var a = currentActeur();
     if(!a){ setPointageStatus('Sélectionnez votre nom avant de pointer.', 'err'); return; }
+    if(a.role!=='VOLONTAIRE' && !siteDuJourChoisi(a)){ setPointageStatus('Choisissez le site où vous pointez aujourd\'hui.', 'err'); return; }
     openPinModal(a, 'depart');
   });
-  document.getElementById('p-acteur').addEventListener('change', renderMesPointages);
+  document.getElementById('p-acteur').addEventListener('change', function(){ majSiteDuJour(); renderMesPointages(); });
 
   async function renderMesPointages(){
     var a = currentActeur();
@@ -654,9 +689,39 @@
       });
     }catch(e){}
   }
+  // Le champ "site" du formulaire d'ajout change selon le rôle :
+  // VOLONTAIRE → un seul site. ENSEIGNANT_ITINERANT → jusqu'à 4 sites (cases à cocher).
+  // CPPP / CANEF / IEPP → aucun site à choisir (périmètre = secteur ou national).
+  async function majChampsSiteFormulaireActeur(){
+    var role = document.getElementById('n-role').value;
+    var secteurId = document.getElementById('n-secteur').value;
+    var siteWrap = document.getElementById('n-site-wrap');
+    var affectesWrap = document.getElementById('n-sites-affectes-wrap');
+    var infoEl = document.getElementById('n-site-info');
+    siteWrap.classList.add('hidden'); affectesWrap.classList.add('hidden'); infoEl.classList.add('hidden');
+    if(role==='VOLONTAIRE'){
+      siteWrap.classList.remove('hidden');
+    } else if(role==='ENSEIGNANT_ITINERANT'){
+      affectesWrap.classList.remove('hidden');
+      var sites = secteurId ? await loadSites(secteurId, 'n-site', 'Choisir') : [];
+      var list = document.getElementById('n-sites-affectes-list');
+      list.innerHTML = sites.map(function(s){
+        return '<label style="display:inline-flex;align-items:center;gap:4px;font-weight:400;"><input type="checkbox" value="'+s.id+'" class="n-site-affecte-ck"> '+s.nom+'</label>';
+      }).join('') || '<span class="muted">Choisissez un secteur pour voir ses sites.</span>';
+    } else if(role==='CPPP'){
+      infoEl.textContent = 'Ce rôle a accès à tous les sites du secteur choisi — aucun site à sélectionner.';
+      infoEl.classList.remove('hidden');
+    } else {
+      infoEl.textContent = 'Ce rôle a accès à tous les sites, tous secteurs confondus — aucun site à sélectionner.';
+      infoEl.classList.remove('hidden');
+    }
+  }
+  document.getElementById('n-role').addEventListener('change', majChampsSiteFormulaireActeur);
   document.getElementById('n-secteur').addEventListener('change', async function(){
     await loadSites(this.value, 'n-site', 'Choisir');
+    majChampsSiteFormulaireActeur();
   });
+  majChampsSiteFormulaireActeur();
   document.getElementById('btnAddActeur').addEventListener('click', async function(){
     var nom = document.getElementById('n-nom').value.trim();
     var role = document.getElementById('n-role').value;
@@ -664,11 +729,21 @@
     var siteId = document.getElementById('n-site').value;
     var pin = document.getElementById('n-pin').value.trim();
     var statusEl = document.getElementById('addActeurStatus');
-    if(!nom || !secteurId || !siteId || !/^\d{4}$/.test(pin)){
-      statusEl.className='status err'; statusEl.textContent='Nom, secteur, site et un PIN à 4 chiffres sont requis.'; return;
+    if(!nom || !secteurId || !/^\d{4}$/.test(pin)){
+      statusEl.className='status err'; statusEl.textContent='Nom, secteur et un PIN à 4 chiffres sont requis.'; return;
+    }
+    var payload = { nom: nom, role: role, secteurId: secteurId, pin: pin };
+    if(role==='VOLONTAIRE'){
+      if(!siteId){ statusEl.className='status err'; statusEl.textContent='Site requis pour un volontaire.'; return; }
+      payload.siteId = siteId;
+    } else if(role==='ENSEIGNANT_ITINERANT'){
+      var ids = Array.prototype.map.call(document.querySelectorAll('.n-site-affecte-ck:checked'), function(c){ return c.value; });
+      if(!ids.length){ statusEl.className='status err'; statusEl.textContent='Choisissez au moins un site affecté.'; return; }
+      if(ids.length>4){ statusEl.className='status err'; statusEl.textContent='4 sites maximum.'; return; }
+      payload.sitesAffectesIds = ids;
     }
     try{
-      await apiSend('/api/acteurs', 'POST', { nom: nom, role: role, secteurId: secteurId, siteId: siteId, pin: pin });
+      await apiSend('/api/acteurs', 'POST', payload);
       statusEl.className='status ok'; statusEl.textContent='Acteur ajouté.';
       document.getElementById('n-nom').value=''; document.getElementById('n-pin').value='';
       loadActeursBody();
@@ -690,7 +765,11 @@
       acteurs.forEach(function(a){
         var cat = categorieDeRole(a.role);
         var secteurNom = a.secteur ? a.secteur.nom : 'Sans secteur';
-        var siteNom = a.site ? a.site.nom : 'Sans site';
+        var siteNom;
+        if(a.role==='VOLONTAIRE') siteNom = a.site ? a.site.nom : 'Sans site';
+        else if(a.role==='ENSEIGNANT_ITINERANT') siteNom = a.sitesAffectes && a.sitesAffectes.length ? 'Sites : '+a.sitesAffectes.map(function(s){return s.nom;}).join(', ') : 'Aucun site affecté';
+        else if(a.role==='CPPP') siteNom = 'Tous les sites du secteur';
+        else siteNom = 'Tous les sites (national)';
         groupes[cat] = groupes[cat] || {};
         groupes[cat][secteurNom] = groupes[cat][secteurNom] || {};
         groupes[cat][secteurNom][siteNom] = groupes[cat][secteurNom][siteNom] || [];

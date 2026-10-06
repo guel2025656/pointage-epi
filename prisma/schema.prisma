@@ -36,13 +36,19 @@ model Site {
   longitude Float?
   secteurId String
   secteur   Secteur  @relation(fields: [secteurId], references: [id])
-  acteurs   Acteur[]
+  acteurs   Acteur[]   @relation("SitePrincipal")
+  acteursAffectes Acteur[] @relation("SitesAffectes")
   pointages Pointage[]
   createdAt DateTime @default(now())
 
   @@unique([secteurId, nom])
 }
 
+// Portée de pointage selon le rôle :
+// - VOLONTAIRE : un seul site fixe (siteId).
+// - ENSEIGNANT_ITINERANT : jusqu'à 4 sites assignés (sitesAffectes), choix du site au moment de pointer.
+// - CPPP : tous les sites de son secteur (secteurId), pas d'assignation de site.
+// - CANEF / IEPP : tous les sites, tous secteurs, pas d'assignation de site.
 model Acteur {
   id        String     @id @default(cuid())
   nom       String
@@ -51,8 +57,9 @@ model Acteur {
   actif     Boolean    @default(true)
   secteurId String
   secteur   Secteur    @relation(fields: [secteurId], references: [id])
-  siteId    String
-  site      Site       @relation(fields: [siteId], references: [id])
+  siteId    String?
+  site      Site?      @relation("SitePrincipal", fields: [siteId], references: [id])
+  sitesAffectes Site[] @relation("SitesAffectes")
   pointages Pointage[]
   absences  Absence[]
   createdAt DateTime   @default(now())

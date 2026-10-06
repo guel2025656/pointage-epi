@@ -11,10 +11,42 @@ function todayUtcDate(dateStr) {
 }
 
 async function checkPin(acteurId, pin) {
-  const acteur = await prisma.acteur.findUnique({ where: { id: acteurId } });
+  const acteur = await prisma.acteur.findUnique({
+    where: { id: acteurId },
+    include: { sitesAffectes: { select: { id: true } } },
+  });
   if (!acteur || !acteur.actif) return null;
   const ok = await bcrypt.compare(String(pin), acteur.pin);
   return ok ? acteur : null;
+}
+
+// Détermine le site effectif du pointage et vérifie qu'il est bien dans le
+// périmètre de l'acteur, selon son rôle :
+// VOLONTAIRE → son site fixe uniquement. ENSEIGNANT_ITINERANT → l'un de ses
+// sites affectés (max 4). CPPP → n'importe quel site de son secteur.
+// CANEF / IEPP → n'importe quel site, tous secteurs confondus.
+async function resoudreSiteAutorise(acteur, siteIdDemande) {
+  if (acteur.role === 'VOLONTAIRE') {
+    if (!acteur.siteId) return { erreur: "Cet acteur n'a pas de site assigné." };
+    return { siteId: acteur.siteId };
+  }
+  if (acteur.role === 'ENSEIGNANT_ITINERANT') {
+    const autorises = acteur.sitesAffectes.map((s) => s.id);
+    if (!siteIdDemande || !autorises.includes(siteIdDemande)) {
+      return { erreur: "Veuillez choisir l'un de vos sites affectés." };
+    }
+    return { siteId: siteIdDemande };
+  }
+  if (!siteIdDemande) return { erreur: 'Veuillez choisir le site où vous pointez.' };
+  if (acteur.role === 'CPPP') {
+    const site = await prisma.site.findUnique({ where: { id: siteIdDemande } });
+    if (!site || site.secteurId !== acteur.secteurId) {
+      return { erreur: "Ce site n'appartient pas à votre secteur." };
+    }
+    return { siteId: siteIdDemande };
+  }
+  // CANEF / IEPP : tous les sites sont autorisés.
+  return { siteId: siteIdDemande };
 }
 
 const RAYON_TOLERANCE_METRES = 150;
@@ -50,22 +82,25 @@ function verifierPresenceSurSite(site, lat, lng) {
 
 // POST /api/pointages/arrivee
 router.post('/arrivee', async (req, res) => {
-  const { acteurId, pin, date, heure, lat, lng, creeHorsLigne } = req.body || {};
+  const { acteurId, pin, date, heure, lat, lng, siteId, creeHorsLigne } = req.body || {};
   if (!acteurId || !pin || !date || !heure) {
     return res.status(400).json({ error: 'acteurId, pin, date et heure sont requis.' });
   }
   const acteur = await checkPin(acteurId, pin);
   if (!acteur) return res.status(401).json({ error: 'Code PIN incorrect ou acteur inactif.' });
 
-  const site = await prisma.site.findUnique({ where: { id: acteur.siteId } });
+  const { siteId: siteEffectif, erreur: erreurSite } = await resoudreSiteAutorise(acteur, siteId);
+  if (erreurSite) return res.status(403).json({ error: erreurSite });
+
+  const site = await prisma.site.findUnique({ where: { id: siteEffectif } });
   const erreurPosition = verifierPresenceSurSite(site, lat ?? null, lng ?? null);
   if (erreurPosition) return res.status(403).json({ error: erreurPosition });
 
   const pointage = await prisma.pointage.upsert({
     where: { acteurId_date: { acteurId, date: todayUtcDate(date) } },
-    update: { heureArrivee: heure, latArrivee: lat ?? null, lngArrivee: lng ?? null },
+    update: { heureArrivee: heure, latArrivee: lat ?? null, lngArrivee: lng ?? null, siteId: siteEffectif },
     create: {
-      acteurId, siteId: acteur.siteId, date: todayUtcDate(date),
+      acteurId, siteId: siteEffectif, date: todayUtcDate(date),
       heureArrivee: heure, latArrivee: lat ?? null, lngArrivee: lng ?? null,
       creeHorsLigne: !!creeHorsLigne,
     },
@@ -75,14 +110,17 @@ router.post('/arrivee', async (req, res) => {
 
 // POST /api/pointages/depart
 router.post('/depart', async (req, res) => {
-  const { acteurId, pin, date, heure, lat, lng, creeHorsLigne } = req.body || {};
+  const { acteurId, pin, date, heure, lat, lng, siteId, creeHorsLigne } = req.body || {};
   if (!acteurId || !pin || !date || !heure) {
     return res.status(400).json({ error: 'acteurId, pin, date et heure sont requis.' });
   }
   const acteur = await checkPin(acteurId, pin);
   if (!acteur) return res.status(401).json({ error: 'Code PIN incorrect ou acteur inactif.' });
 
-  const site = await prisma.site.findUnique({ where: { id: acteur.siteId } });
+  const { siteId: siteEffectif, erreur: erreurSite } = await resoudreSiteAutorise(acteur, siteId);
+  if (erreurSite) return res.status(403).json({ error: erreurSite });
+
+  const site = await prisma.site.findUnique({ where: { id: siteEffectif } });
   const erreurPosition = verifierPresenceSurSite(site, lat ?? null, lng ?? null);
   if (erreurPosition) return res.status(403).json({ error: erreurPosition });
 
@@ -90,7 +128,7 @@ router.post('/depart', async (req, res) => {
     where: { acteurId_date: { acteurId, date: todayUtcDate(date) } },
     update: { heureDepart: heure, latDepart: lat ?? null, lngDepart: lng ?? null },
     create: {
-      acteurId, siteId: acteur.siteId, date: todayUtcDate(date),
+      acteurId, siteId: siteEffectif, date: todayUtcDate(date),
       heureDepart: heure, latDepart: lat ?? null, lngDepart: lng ?? null,
       creeHorsLigne: !!creeHorsLigne,
     },
