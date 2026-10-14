@@ -180,8 +180,22 @@
   };
   function rolesDeCategorie(categorie){ return CATEGORIES[categorie] || null; }
 
+  function acteurRattacheAuSite(a, siteId){
+    var b = getOfflineBundle();
+    var site = b && b.sites.find(function(s){ return s.id===siteId; });
+    if(!site) return true;
+    if(a.siteId===siteId) return true;
+    if((a.sitesAffectesIds||[]).indexOf(siteId)!==-1) return true;
+    if(a.role==='CPPP') return a.secteurId===site.secteurId;
+    if(a.role==='IEPP' || a.role==='CANEF'){
+      if(!a.inspectionId) return true;
+      var sec = b.secteurs.find(function(x){ return x.id===site.secteurId; });
+      return !!sec && sec.inspectionId===a.inspectionId;
+    }
+    return false;
+  }
   async function loadActeurs(secteurId, siteId, categorie){
-    var roles = rolesDeCategorie(categorie);
+    var roles = state.roleChoisi ? [state.roleChoisi] : rolesDeCategorie(categorie);
     var qs = [];
     if(secteurId) qs.push('secteurId='+secteurId);
     if(siteId) qs.push('siteId='+siteId);
@@ -191,7 +205,8 @@
       var b = getOfflineBundle();
       if(!b) throw e;
       state.acteurs = b.acteurs.filter(function(a){
-        return (!secteurId || a.secteurId===secteurId) && (!siteId || a.siteId===siteId);
+        if(siteId) return acteurRattacheAuSite(a, siteId);
+        return !secteurId || a.secteurId===secteurId;
       });
     }
     if(roles) state.acteurs = state.acteurs.filter(function(a){ return roles.indexOf(a.role)!==-1; });
@@ -278,6 +293,7 @@
       }
       var q = getQueue(); q.push(Object.assign({type:type}, payload)); setQueue(q);
       closePinModal();
+      if(type==='arrivee') marquerArriveeFaite(acteur.id);
       setPointageStatus('Pointage enregistré hors-ligne — sera synchronisé au retour du réseau.', 'warn');
       renderMesPointages();
       return;
@@ -285,16 +301,18 @@
     try{
       await apiSend('/api/pointages/'+type, 'POST', payload);
       closePinModal();
+      if(type==='arrivee') marquerArriveeFaite(acteur.id);
       setPointageStatus((type==='arrivee'?'Arrivée':'Départ')+' enregistré(e) pour '+acteur.nom+' à '+payload.heure+'.', 'ok');
       renderMesPointages();
     }catch(e){
       var msg = (e && e.error) || '';
-      if(/PIN|loin|géolocalisation/i.test(msg)){
+      if(msg){
         statusEl.className='status err'; statusEl.textContent = msg;
         return;
       }
       var q2 = getQueue(); q2.push(Object.assign({type:type}, payload)); setQueue(q2);
       closePinModal();
+      if(type==='arrivee') marquerArriveeFaite(acteur.id);
       setPointageStatus('Connexion instable — pointage mis en attente de synchronisation.', 'warn');
     }
   });
@@ -308,32 +326,36 @@
     return state.acteurs.find(function(a){return a.id===id;});
   }
   // Détermine la liste des sites où un acteur peut pointer, selon son rôle.
+  async function tousLesSites(){
+    try{ return await apiGet('/api/sites'); }
+    catch(e){ var bb = getOfflineBundle(); return bb ? bb.sites : []; }
+  }
   async function sitesPourActeur(a){
-    if(a.role==='VOLONTAIRE') return [];
+    var tous = await tousLesSites();
+    if(a.role==='VOLONTAIRE') return tous.filter(function(s){ return s.id===a.siteId; });
     if(a.role==='ENSEIGNANT_ITINERANT'){
-      if(a.sitesAffectes) return a.sitesAffectes;
-      if(a.sitesAffectesIds){
-        var b = getOfflineBundle();
-        var tousB = b ? b.sites : [];
-        return tousB.filter(function(s){ return a.sitesAffectesIds.indexOf(s.id)!==-1; });
-      }
-      return [];
+      var ids = (a.sitesAffectes ? a.sitesAffectes.map(function(s){return s.id;}) : (a.sitesAffectesIds||[])).slice();
+      if(a.siteId && ids.indexOf(a.siteId)===-1) ids.push(a.siteId); // ancien site unique
+      return tous.filter(function(s){ return ids.indexOf(s.id)!==-1; });
     }
-    var tous;
-    try{ tous = await apiGet('/api/sites'); }
-    catch(e){ var bb = getOfflineBundle(); tous = bb ? bb.sites : []; }
     if(a.role==='CPPP') return tous.filter(function(s){ return s.secteurId===a.secteurId; });
-    return tous; // CANEF / IEPP : tous les sites
+    // CANEF / IEPP : sites de leur inspection (tous si non rattachés)
+    if(!a.inspectionId) return tous;
+    var secteursIds = (state.secteurs||[]).filter(function(x){ return x.inspectionId===a.inspectionId; }).map(function(x){ return x.id; });
+    return tous.filter(function(s){ return secteursIds.indexOf(s.secteurId)!==-1; });
   }
   async function majSiteDuJour(){
     var a = currentActeur();
     var wrap = document.getElementById('siteDuJourWrap');
     var sel = document.getElementById('p-site-du-jour');
-    if(!a || a.role==='VOLONTAIRE'){ wrap.classList.add('hidden'); sel.innerHTML=''; return; }
+    if(!a){ wrap.classList.add('hidden'); sel.innerHTML=''; return; }
     var sites = await sitesPourActeur(a);
     sel.innerHTML = sites.map(function(s){ return '<option value="'+s.id+'">'+s.nom+'</option>'; }).join('');
     var siteFiltre = document.getElementById('p-site').value;
     if(siteFiltre && sites.some(function(s){return s.id===siteFiltre;})) sel.value = siteFiltre;
+    var unique = a.role==='VOLONTAIRE';
+    sel.disabled = unique;
+    document.getElementById('siteDuJourLabel').textContent = unique ? 'Votre site' : (a.role==='ENSEIGNANT_ITINERANT' ? 'Site où vous pointez aujourd\'hui (vos sites affectés)' : 'Site où vous pointez aujourd\'hui');
     wrap.classList.remove('hidden');
   }
   function siteDuJourChoisi(a){
@@ -406,7 +428,8 @@
       document.getElementById('sessionInfo').textContent = state.admin.nom+' — portée : '+(state.admin.portee==='NATIONALE'?'nationale':'secteur');
       document.getElementById('adminsCard').classList.toggle('hidden', state.admin.portee!=='NATIONALE');
       loadDashboard(); loadAbsences(); loadQrCodes();
-      loadSecteursBody(); loadSitesBody(); loadActeursBody();
+      loadInspectionsBody(); loadSecteursBody(); loadSitesBody(); loadActeursBody();
+      document.getElementById('param-heure').value = heureDebut();
       if(state.admin.portee==='NATIONALE'){ fillSelect('sv-secteur', state.secteurs, 'Choisir'); loadAdmins(); }
     }
   }
@@ -591,6 +614,201 @@
     reader.readAsText(file);
   });
 
+
+  // ---------- Accueil par catégorie ----------
+  var ROLE_TITRES = { VOLONTAIRE:'Volontaire', ENSEIGNANT_ITINERANT:'Enseignant itinérant', CPPP:'CPPP', CANEF:'CANEF', IEPP:'IEPP' };
+  async function choisirRole(role){
+    state.roleChoisi = role;
+    document.getElementById('accueilCard').classList.add('hidden');
+    document.getElementById('pointerCard').classList.remove('hidden');
+    document.getElementById('pointerTitre').textContent = 'Se pointer — '+ROLE_TITRES[role];
+    document.getElementById('rappelsCard').classList.toggle('hidden', !(role==='VOLONTAIRE' || role==='ENSEIGNANT_ITINERANT'));
+    document.getElementById('p-acteur').value = '';
+    majSiteDuJour();
+    await loadActeurs(document.getElementById('p-secteur').value, document.getElementById('p-site').value, '');
+  }
+  function retourAccueil(){
+    state.roleChoisi = null;
+    document.getElementById('accueilCard').classList.remove('hidden');
+    document.getElementById('pointerCard').classList.add('hidden');
+    document.getElementById('rappelsCard').classList.add('hidden');
+  }
+  document.querySelectorAll('.home-btn[data-role]').forEach(function(btn){
+    btn.addEventListener('click', function(){ choisirRole(btn.dataset.role); });
+  });
+  document.getElementById('btnRetourAccueil').addEventListener('click', retourAccueil);
+  document.getElementById('btnAccueilAdmin').addEventListener('click', function(){
+    document.querySelector('.tab[data-tab="admin"]').click();
+  });
+
+  // ---------- Rappels de pointage (volontaires et itinérants) ----------
+  function heureDebut(){ return localStorage.getItem('epi_heure_debut') || '07:30'; }
+  function enMinutes(hhmm){ var p = hhmm.split(':'); return parseInt(p[0],10)*60 + parseInt(p[1],10); }
+  function monActeur(){ try{ return JSON.parse(localStorage.getItem('epi_mon_acteur')||'null'); }catch(e){ return null; } }
+  function marquerArriveeFaite(id){ localStorage.setItem('epi_arrivee_'+todayStr()+'_'+id, '1'); }
+  function arriveeFaite(id){ return !!localStorage.getItem('epi_arrivee_'+todayStr()+'_'+id); }
+  async function chargerParametres(){
+    try{ var p = await apiGet('/api/parametres'); localStorage.setItem('epi_heure_debut', p.heureDebutCours); }
+    catch(e){ var b = getOfflineBundle(); if(b && b.parametres) localStorage.setItem('epi_heure_debut', b.parametres.heureDebutCours); }
+    majRappelsUI();
+  }
+  function majRappelsUI(){
+    var h = document.getElementById('rappelHeure'); if(h) h.textContent = heureDebut();
+    var st = document.getElementById('rappelsStatus'); if(!st) return;
+    var m = monActeur();
+    document.getElementById('btnDesactiverRappels').classList.toggle('hidden', !m);
+    if(!m){ st.textContent = 'Rappels non activés sur cet appareil.'; return; }
+    var notif = (window.Notification && Notification.permission==='granted') ? ' Notifications autorisées.' : ' (Autorisez les notifications du navigateur pour être alerté même hors de la page.)';
+    st.textContent = 'Rappels activés pour '+m.nom+' (lundi à vendredi, 5 min avant et 5 min après '+heureDebut()+').'+notif+' Ils s\'affichent quand l\'application est ouverte.';
+  }
+  function bip(){
+    try{
+      var C = window.AudioContext || window.webkitAudioContext; var ctx = new C();
+      [0, 0.35, 0.7].forEach(function(t){
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination); o.frequency.value = 880; g.gain.value = 0.3;
+        o.start(ctx.currentTime+t); o.stop(ctx.currentTime+t+0.2);
+      });
+    }catch(e){}
+  }
+  function declencherRappel(msg){
+    document.getElementById('rappelBannerText').textContent = msg;
+    document.getElementById('rappelBanner').classList.remove('hidden');
+    try{ if(navigator.vibrate) navigator.vibrate([300,150,300,150,300]); }catch(e){}
+    bip();
+    if(window.Notification && Notification.permission==='granted' && navigator.serviceWorker){
+      navigator.serviceWorker.getRegistration().then(function(reg){
+        if(reg) reg.showNotification('Pointage EPI', { body: msg, tag: 'rappel-pointage', renotify: true, vibrate: [300,150,300] });
+        else new Notification('Pointage EPI', { body: msg });
+      }).catch(function(){});
+    }
+  }
+  function checkRappels(){
+    var m = monActeur(); if(!m) return;
+    var d = new Date(); if(d.getDay()===0 || d.getDay()===6) return;
+    if(arriveeFaite(m.id)) { document.getElementById('rappelBanner').classList.add('hidden'); return; }
+    var maintenant = d.getHours()*60 + d.getMinutes();
+    var debut = enMinutes(heureDebut());
+    var cle = 'epi_rappel_'+todayStr()+'_'+m.id+'_';
+    if(maintenant >= debut-5 && maintenant < debut && !localStorage.getItem(cle+'avant')){
+      localStorage.setItem(cle+'avant', '1');
+      declencherRappel('Rappel : les cours commencent à '+heureDebut()+'. Pensez à pointer votre arrivée.');
+    } else if(maintenant >= debut+5 && maintenant < debut+120 && !localStorage.getItem(cle+'apres')){
+      localStorage.setItem(cle+'apres', '1');
+      declencherRappel("Vous n'avez pas encore pointé ! Les cours ont commencé à "+heureDebut()+'.');
+    }
+  }
+  setInterval(checkRappels, 15000);
+  setTimeout(checkRappels, 1500);
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) checkRappels(); });
+  document.getElementById('rappelBannerClose').addEventListener('click', function(){ document.getElementById('rappelBanner').classList.add('hidden'); });
+  document.getElementById('rappelBannerBtn').addEventListener('click', async function(){
+    document.getElementById('rappelBanner').classList.add('hidden');
+    var m = monActeur(); if(!m) return;
+    document.querySelector('.tab[data-tab="pointage"]').click();
+    await choisirRole(m.role);
+    document.getElementById('p-acteur').value = m.id;
+    await majSiteDuJour(); renderMesPointages();
+  });
+  document.getElementById('btnActiverRappels').addEventListener('click', async function(){
+    var a = currentActeur();
+    if(!a){ document.getElementById('rappelsStatus').textContent = "Choisissez d'abord votre nom dans la liste ci-dessus."; return; }
+    localStorage.setItem('epi_mon_acteur', JSON.stringify({ id: a.id, nom: a.nom, role: a.role }));
+    if(window.Notification && Notification.permission==='default'){ try{ await Notification.requestPermission(); }catch(e){} }
+    majRappelsUI(); checkRappels();
+  });
+  document.getElementById('btnDesactiverRappels').addEventListener('click', function(){
+    localStorage.removeItem('epi_mon_acteur'); majRappelsUI();
+  });
+  document.getElementById('btnRappelsAgenda').addEventListener('click', function(){
+    var a = currentActeur() || monActeur();
+    var st = document.getElementById('rappelsStatus');
+    if(!a){ st.textContent = "Choisissez d'abord votre nom dans la liste ci-dessus."; return; }
+    var debut = enMinutes(heureDebut());
+    var pad = function(n){ return (n<10?'0':'')+n; };
+    var d = new Date(); while(d.getDay()===0 || d.getDay()===6) d.setDate(d.getDate()+1);
+    var jour = d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate());
+    var dt = function(mins){ return jour+'T'+pad(Math.floor(mins/60))+pad(mins%60)+'00'; };
+    var stamp = new Date().toISOString().replace(/[-:]/g,'').split('.')[0]+'Z';
+    var evts = [
+      { titre: 'Pointage EPI : pensez à pointer votre arrivée', mins: debut-5 },
+      { titre: "Pointage EPI : pointez maintenant, les cours ont commencé !", mins: debut+5 }
+    ];
+    var lignes = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Pointage EPI//FR','CALSCALE:GREGORIAN'];
+    evts.forEach(function(e, i){
+      lignes.push('BEGIN:VEVENT','UID:epi-rappel-'+i+'-'+Date.now()+'@pointage-epi','DTSTAMP:'+stamp,
+        'DTSTART:'+dt(e.mins),'DTEND:'+dt(e.mins+5),'RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR',
+        'SUMMARY:'+e.titre,'DESCRIPTION:Ouvrez Pointage EPI pour enregistrer votre arrivée.',
+        'BEGIN:VALARM','TRIGGER:PT0S','ACTION:DISPLAY','DESCRIPTION:'+e.titre,'END:VALARM','END:VEVENT');
+    });
+    lignes.push('END:VCALENDAR');
+    var blob = new Blob([lignes.join('\r\n')], { type: 'text/calendar' });
+    var lien = document.createElement('a');
+    lien.href = URL.createObjectURL(blob); lien.download = 'rappels-pointage-epi.ics'; lien.click();
+    st.textContent = "Fichier téléchargé : ouvrez-le pour ajouter les rappels (lundi–vendredi) à l'agenda du téléphone.";
+  });
+
+  // ---------- Inspections (IEPP) ----------
+  async function loadInspections(){
+    try{ state.inspections = await apiGet('/api/inspections'); }
+    catch(e){ var b = getOfflineBundle(); state.inspections = (b && b.inspections) || []; }
+    fillSelect('n-inspection', state.inspections, 'Choisir');
+  }
+  document.getElementById('btnAddInspection').addEventListener('click', async function(){
+    var nom = document.getElementById('n-inspection-nom').value.trim();
+    var st = document.getElementById('addInspectionStatus');
+    if(!nom){ st.className='status err'; st.textContent='Nom requis.'; return; }
+    try{
+      await apiSend('/api/inspections', 'POST', { nom: nom });
+      st.className='status ok'; st.textContent='Inspection ajoutée.';
+      document.getElementById('n-inspection-nom').value='';
+      await loadInspections(); loadInspectionsBody(); loadSecteursBody();
+    }catch(e){ st.className='status err'; st.textContent=(e&&e.error)||'Échec.'; }
+  });
+  async function loadInspectionsBody(){
+    if(!state.token) return;
+    try{
+      await loadInspections();
+      var body = document.getElementById('inspectionsBody');
+      body.innerHTML = state.inspections.length ? state.inspections.map(function(i){
+        return '<tr><td>'+i.nom+'</td><td>'+
+          '<button class="secondary small" data-rename-insp="'+i.id+'" data-nom="'+i.nom+'">Renommer</button> '+
+          '<button class="secondary small" data-del-insp="'+i.id+'">Supprimer</button></td></tr>';
+      }).join('') : '<tr><td colspan="2" class="muted">Aucune inspection. Ajoutez-en une, puis rattachez-y les secteurs.</td></tr>';
+      body.querySelectorAll('[data-rename-insp]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var n = prompt("Nouveau nom de l'inspection :", btn.dataset.nom);
+          if(!n || !n.trim()) return;
+          try{ await apiSend('/api/inspections/'+btn.dataset.renameInsp, 'PATCH', { nom: n.trim() }); loadInspectionsBody(); loadSecteursBody(); }
+          catch(e){ alert((e&&e.error)||'Échec.'); }
+        });
+      });
+      body.querySelectorAll('[data-del-insp]').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          if(!confirm('Supprimer cette inspection ?')) return;
+          try{ await apiSend('/api/inspections/'+btn.dataset.delInsp, 'DELETE'); loadInspectionsBody(); }
+          catch(e){ alert((e&&e.error)||'Échec.'); }
+        });
+      });
+    }catch(e){}
+  }
+  function optionsInspection(selectedId){
+    return '<option value="">— Aucune —</option>' + (state.inspections||[]).map(function(i){
+      return '<option value="'+i.id+'"'+(i.id===selectedId?' selected':'')+'>'+i.nom+'</option>';
+    }).join('');
+  }
+
+  // ---------- Paramètres (heure de début des cours) ----------
+  document.getElementById('btnSaveParam').addEventListener('click', async function(){
+    var st = document.getElementById('paramStatus');
+    var v = document.getElementById('param-heure').value;
+    try{
+      await apiSend('/api/parametres', 'PATCH', { heureDebutCours: v });
+      localStorage.setItem('epi_heure_debut', v); majRappelsUI();
+      st.className='status ok'; st.textContent='Heure de début des cours enregistrée : '+v+'.';
+    }catch(e){ st.className='status err'; st.textContent=(e&&e.error)||'Échec.'; }
+  });
+
   // ---------- Admin: secteurs / sites / acteurs ----------
   document.getElementById('btnAddSecteur').addEventListener('click', async function(){
     var nom = document.getElementById('n-secteur-nom').value.trim();
@@ -607,13 +825,21 @@
   async function loadSecteursBody(){
     if(!state.token) return;
     try{
+      await loadInspections();
       var secteurs = await apiGet('/api/secteurs');
       var body = document.getElementById('secteursBody');
       body.innerHTML = secteurs.length ? secteurs.map(function(s){
-        return '<tr><td>'+s.nom+'</td><td>'+
+        return '<tr><td>'+s.nom+'</td>'+
+          '<td><select data-insp-secteur="'+s.id+'" style="min-width:140px;">'+optionsInspection(s.inspectionId)+'</select></td><td>'+
           '<button class="secondary small" data-rename-secteur="'+s.id+'" data-nom="'+s.nom+'">Renommer</button> '+
           '<button class="secondary small" data-del-secteur="'+s.id+'">Supprimer</button></td></tr>';
-      }).join('') : '<tr><td colspan="2" class="muted">Aucun secteur.</td></tr>';
+      }).join('') : '<tr><td colspan="3" class="muted">Aucun secteur.</td></tr>';
+      body.querySelectorAll('[data-insp-secteur]').forEach(function(sel){
+        sel.addEventListener('change', async function(){
+          try{ await apiSend('/api/secteurs/'+sel.dataset.inspSecteur, 'PATCH', { inspectionId: sel.value || null }); await loadSecteurs(); }
+          catch(e){ alert((e&&e.error)||'Échec.'); }
+        });
+      });
       body.querySelectorAll('[data-rename-secteur]').forEach(function(btn){
         btn.addEventListener('click', async function(){
           var nouveauNom = prompt('Nouveau nom du secteur :', btn.dataset.nom);
@@ -699,6 +925,7 @@
     var affectesWrap = document.getElementById('n-sites-affectes-wrap');
     var infoEl = document.getElementById('n-site-info');
     siteWrap.classList.add('hidden'); affectesWrap.classList.add('hidden'); infoEl.classList.add('hidden');
+    document.getElementById('n-inspection-wrap').classList.add('hidden');
     if(role==='VOLONTAIRE'){
       siteWrap.classList.remove('hidden');
     } else if(role==='ENSEIGNANT_ITINERANT'){
@@ -712,8 +939,9 @@
       infoEl.textContent = 'Ce rôle a accès à tous les sites du secteur choisi — aucun site à sélectionner.';
       infoEl.classList.remove('hidden');
     } else {
-      infoEl.textContent = 'Ce rôle a accès à tous les sites, tous secteurs confondus — aucun site à sélectionner.';
+      infoEl.textContent = "Ce rôle a accès à tous les sites de son inspection — aucun site à sélectionner. Les secteurs doivent être rattachés à l'inspection (voir ci-dessus).";
       infoEl.classList.remove('hidden');
+      document.getElementById('n-inspection-wrap').classList.remove('hidden');
     }
   }
   document.getElementById('n-role').addEventListener('change', majChampsSiteFormulaireActeur);
@@ -741,6 +969,10 @@
       if(!ids.length){ statusEl.className='status err'; statusEl.textContent='Choisissez au moins un site affecté.'; return; }
       if(ids.length>4){ statusEl.className='status err'; statusEl.textContent='4 sites maximum.'; return; }
       payload.sitesAffectesIds = ids;
+    } else if(role==='IEPP' || role==='CANEF'){
+      var insp = document.getElementById('n-inspection').value;
+      if(!insp){ statusEl.className='status err'; statusEl.textContent="Choisissez l'inspection de rattachement."; return; }
+      payload.inspectionId = insp;
     }
     try{
       await apiSend('/api/acteurs', 'POST', payload);
@@ -757,6 +989,7 @@
   async function loadActeursBody(){
     if(!state.token) return;
     try{
+      await loadInspections();
       var acteurs = await apiGet('/api/acteurs');
       var body = document.getElementById('acteursBody');
       if(!acteurs.length){ body.innerHTML = '<tr><td colspan="5" class="muted">Aucun acteur.</td></tr>'; return; }
@@ -769,7 +1002,7 @@
         if(a.role==='VOLONTAIRE') siteNom = a.site ? a.site.nom : 'Sans site';
         else if(a.role==='ENSEIGNANT_ITINERANT') siteNom = a.sitesAffectes && a.sitesAffectes.length ? 'Sites : '+a.sitesAffectes.map(function(s){return s.nom;}).join(', ') : 'Aucun site affecté';
         else if(a.role==='CPPP') siteNom = 'Tous les sites du secteur';
-        else siteNom = 'Tous les sites (national)';
+        else { var insp0 = (state.inspections||[]).find(function(i){ return i.id===a.inspectionId; }); siteNom = insp0 ? 'Sites de : '+insp0.nom : 'Tous les sites (inspection non définie)'; }
         groupes[cat] = groupes[cat] || {};
         groupes[cat][secteurNom] = groupes[cat][secteurNom] || {};
         groupes[cat][secteurNom][siteNom] = groupes[cat][secteurNom][siteNom] || [];
@@ -787,7 +1020,7 @@
             groupes[cat][secteurNom][siteNom].forEach(function(a){
               html += '<tr><td style="padding-left:48px;">'+a.nom+'</td><td>'+roleLabel(a.role)+'</td><td>'+siteNom+'</td>'+
                 '<td>'+(a.actif?'<span class="badge ok">Actif</span>':'<span class="badge warn">Inactif</span>')+'</td>'+
-                '<td><button class="secondary small" data-rename-acteur="'+a.id+'" data-nom="'+a.nom+'">Renommer</button> '+
+                '<td>'+((a.role==='IEPP'||a.role==='CANEF') ? '<select data-insp-acteur="'+a.id+'">'+optionsInspection(a.inspectionId)+'</select> ' : '')+'<button class="secondary small" data-rename-acteur="'+a.id+'" data-nom="'+a.nom+'">Renommer</button> '+
                 '<button class="secondary small" data-toggle-acteur="'+a.id+'" data-actif="'+a.actif+'">'+(a.actif?'Désactiver':'Activer')+'</button> '+
                 '<button class="secondary small" data-del-acteur="'+a.id+'">Supprimer</button></td></tr>';
             });
@@ -795,6 +1028,12 @@
         });
       });
       body.innerHTML = html;
+      body.querySelectorAll('[data-insp-acteur]').forEach(function(sel){
+        sel.addEventListener('change', async function(){
+          try{ await apiSend('/api/acteurs/'+sel.dataset.inspActeur, 'PATCH', { inspectionId: sel.value || null }); loadActeursBody(); }
+          catch(e){ alert((e&&e.error)||'Échec.'); }
+        });
+      });
       body.querySelectorAll('[data-rename-acteur]').forEach(function(btn){
         btn.addEventListener('click', async function(){
           var nouveauNom = prompt('Nouveau nom :', btn.dataset.nom);
@@ -865,7 +1104,9 @@
     applyUrlSite();
     renderQueue();
     renderOfflineStatus();
+    chargerParametres();
     await loadSecteurs();
+    loadInspections();
     if(urlSite){
       var sites;
       try{ sites = await apiGet('/api/sites'); }

@@ -24,7 +24,7 @@ async function checkPin(acteurId, pin) {
 // périmètre de l'acteur, selon son rôle :
 // VOLONTAIRE → son site fixe uniquement. ENSEIGNANT_ITINERANT → l'un de ses
 // sites affectés (max 4). CPPP → n'importe quel site de son secteur.
-// CANEF / IEPP → n'importe quel site, tous secteurs confondus.
+// CANEF / IEPP → n'importe quel site de leur inspection.
 async function resoudreSiteAutorise(acteur, siteIdDemande) {
   if (acteur.role === 'VOLONTAIRE') {
     if (!acteur.siteId) return { erreur: "Cet acteur n'a pas de site assigné." };
@@ -32,6 +32,7 @@ async function resoudreSiteAutorise(acteur, siteIdDemande) {
   }
   if (acteur.role === 'ENSEIGNANT_ITINERANT') {
     const autorises = acteur.sitesAffectes.map((s) => s.id);
+    if (acteur.siteId) autorises.push(acteur.siteId); // compatibilité : ancien site unique
     if (!siteIdDemande || !autorises.includes(siteIdDemande)) {
       return { erreur: "Veuillez choisir l'un de vos sites affectés." };
     }
@@ -45,7 +46,13 @@ async function resoudreSiteAutorise(acteur, siteIdDemande) {
     }
     return { siteId: siteIdDemande };
   }
-  // CANEF / IEPP : tous les sites sont autorisés.
+  // CANEF / IEPP : tous les sites de leur inspection (tous les sites si non rattachés).
+  if (acteur.inspectionId) {
+    const site = await prisma.site.findUnique({ where: { id: siteIdDemande }, include: { secteur: true } });
+    if (!site || site.secteur.inspectionId !== acteur.inspectionId) {
+      return { erreur: "Ce site n'appartient pas à votre inspection." };
+    }
+  }
   return { siteId: siteIdDemande };
 }
 

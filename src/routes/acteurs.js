@@ -12,12 +12,25 @@ const ROLES_SITES_AFFECTES = ['ENSEIGNANT_ITINERANT'];
 // Public (nécessaire pour la liste déroulante de pointage) — ne renvoie jamais le PIN
 router.get('/', async (req, res) => {
   const { secteurId, siteId } = req.query;
-  const where = {};
-  if (secteurId) where.secteurId = secteurId;
-  if (siteId) where.siteId = siteId;
+  let where = {};
+  if (siteId) {
+    // Tous les acteurs qui peuvent pointer sur ce site : son volontaire, les itinérants
+    // qui l'ont dans leurs sites affectés, les CPPP de son secteur, les IEPP/CANEF de son inspection.
+    const site = await prisma.site.findUnique({ where: { id: siteId }, include: { secteur: true } });
+    if (site) {
+      where = { OR: [
+        { siteId },
+        { sitesAffectes: { some: { id: siteId } } },
+        { role: 'CPPP', secteurId: site.secteurId },
+        { role: { in: ['IEPP', 'CANEF'] }, OR: [{ inspectionId: null }, { inspectionId: site.secteur.inspectionId }] },
+      ] };
+    }
+  } else if (secteurId) {
+    where.secteurId = secteurId;
+  }
   const acteurs = await prisma.acteur.findMany({
     where,
-    select: { id: true, nom: true, role: true, actif: true, secteurId: true, siteId: true,
+    select: { id: true, nom: true, role: true, actif: true, secteurId: true, siteId: true, inspectionId: true,
       site: { select: { nom: true } }, secteur: { select: { nom: true } },
       sitesAffectes: { select: { id: true, nom: true } } },
     orderBy: { nom: 'asc' },
@@ -26,7 +39,7 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', requireAdmin, async (req, res) => {
-  const { nom, role, pin, secteurId, siteId, sitesAffectesIds } = req.body || {};
+  const { nom, role, pin, secteurId, siteId, sitesAffectesIds, inspectionId } = req.body || {};
   if (!nom || !role || !pin || !secteurId) {
     return res.status(400).json({ error: 'nom, role, pin et secteurId sont requis.' });
   }
@@ -44,6 +57,7 @@ router.post('/', requireAdmin, async (req, res) => {
   }
   const pinHash = await bcrypt.hash(String(pin), 10);
   const data = { nom, role, pin: pinHash, secteurId };
+  if (['IEPP', 'CANEF'].includes(role) && inspectionId) data.inspectionId = inspectionId;
   if (ROLES_UN_SEUL_SITE.includes(role)) data.siteId = siteId;
   if (ROLES_SITES_AFFECTES.includes(role)) data.sitesAffectes = { connect: sitesAffectesIds.map((id) => ({ id })) };
   const acteur = await prisma.acteur.create({ data });
@@ -51,12 +65,13 @@ router.post('/', requireAdmin, async (req, res) => {
 });
 
 router.patch('/:id', requireAdmin, async (req, res) => {
-  const { nom, role, siteId, secteurId, actif, pin, sitesAffectesIds } = req.body || {};
+  const { nom, role, siteId, secteurId, actif, pin, sitesAffectesIds, inspectionId } = req.body || {};
   const data = {};
   if (nom) data.nom = nom;
   if (role) data.role = role;
   if (siteId !== undefined) data.siteId = siteId || null;
   if (secteurId) data.secteurId = secteurId;
+  if (inspectionId !== undefined) data.inspectionId = inspectionId || null;
   if (typeof actif === 'boolean') data.actif = actif;
   if (Array.isArray(sitesAffectesIds)) {
     if (sitesAffectesIds.length > 4) return res.status(400).json({ error: 'Un enseignant itinérant ne peut avoir plus de 4 sites affectés.' });

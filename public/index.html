@@ -9,6 +9,7 @@
 <script src="/vendor/bcrypt.min.js"></script>
 </head>
 <body>
+<div id="rappelBanner" class="rappel-banner hidden"><span id="rappelBannerText"></span> <button id="rappelBannerBtn" class="small">Pointer maintenant</button> <button id="rappelBannerClose" class="small secondary">Fermer</button></div>
 <div class="wrap">
   <div class="brand-header">
     <img class="brand-logo" src="/assets/armoiries.png" alt="Armoiries de la Côte d'Ivoire" onerror="this.style.display='none'">
@@ -28,24 +29,38 @@
 
   <!-- POINTAGE -->
   <div class="panel active" id="panel-pointage">
-    <div class="card">
-      <h2>Se pointer</h2>
+    <div class="card" id="accueilCard">
+      <h2>Qui êtes-vous ?</h2>
+      <p class="muted">Touchez le bouton correspondant à votre fonction.</p>
+      <div class="home-grid">
+        <button class="home-btn" data-role="VOLONTAIRE">Volontaire</button>
+        <button class="home-btn" data-role="ENSEIGNANT_ITINERANT">Enseignant itinérant</button>
+        <button class="home-btn" data-role="CPPP">CPPP</button>
+        <button class="home-btn" data-role="CANEF">CANEF</button>
+        <button class="home-btn" data-role="IEPP">IEPP</button>
+        <button class="home-btn admin" id="btnAccueilAdmin">Administrateur</button>
+      </div>
+    </div>
+    <div class="card hidden" id="pointerCard">
+      <button class="secondary small" id="btnRetourAccueil">← Retour à l'accueil</button>
+      <h2 id="pointerTitre" style="margin-top:10px;">Se pointer</h2>
       <div id="siteContext" class="status info hidden"></div>
-      <label>Catégorie</label>
-      <select id="p-categorie">
-        <option value="">Choisir une catégorie</option>
-        <option value="ENCADREMENT">Personnel d'encadrement</option>
-        <option value="ENSEIGNANTS">Enseignants itinérants</option>
-        <option value="VOLONTAIRES">Volontaires</option>
-      </select>
-      <label>Secteur pédagogique</label>
+      <div class="hidden">
+        <select id="p-categorie">
+          <option value="">Choisir une catégorie</option>
+          <option value="ENCADREMENT">Personnel d'encadrement</option>
+          <option value="ENSEIGNANTS">Enseignants itinérants</option>
+          <option value="VOLONTAIRES">Volontaires</option>
+        </select>
+      </div>
+      <label>Secteur pédagogique (facultatif, pour retrouver votre nom plus vite)</label>
       <select id="p-secteur"><option value="">Tous les secteurs</option></select>
-      <label>Site</label>
+      <label>Site (facultatif)</label>
       <select id="p-site"><option value="">Tous les sites</option></select>
       <label>Votre nom</label>
       <select id="p-acteur"><option value="">Sélectionnez votre nom</option></select>
       <div id="siteDuJourWrap" class="hidden">
-        <label>Site où vous pointez aujourd'hui</label>
+        <label id="siteDuJourLabel">Site où vous pointez aujourd'hui</label>
         <select id="p-site-du-jour"></select>
       </div>
       <div class="row" style="margin-top:14px;">
@@ -53,6 +68,17 @@
         <button class="secondary" id="btnDepart">Enregistrer mon départ</button>
       </div>
       <div id="pointageStatus"></div>
+    </div>
+    <div class="card hidden" id="rappelsCard">
+      <h2>Rappels de pointage</h2>
+      <p class="muted">Un rappel vous est envoyé 5 minutes avant et 5 minutes après l'heure de début des cours (<span id="rappelHeure">07:30</span>), si vous n'avez pas encore pointé. Choisissez votre nom ci-dessus, puis activez les rappels sur cet appareil.</p>
+      <div class="row">
+        <button class="secondary small" id="btnActiverRappels">Activer les rappels sur cet appareil</button>
+        <button class="secondary small" id="btnRappelsAgenda">Ajouter à l'agenda du téléphone (.ics)</button>
+        <button class="secondary small hidden" id="btnDesactiverRappels">Désactiver</button>
+      </div>
+      <div id="rappelsStatus" class="muted" style="margin-top:8px;"></div>
+      <p class="muted" style="margin-top:8px;">Astuce : l'ajout à l'agenda crée de vraies alarmes du téléphone, qui sonnent même si l'application est fermée et sans connexion internet.</p>
     </div>
     <div class="card" id="offlineCard">
       <h2>Données hors-ligne</h2>
@@ -208,6 +234,30 @@
       </div>
 
       <div class="card">
+        <h2>Paramètres</h2>
+        <div class="row">
+          <div><label>Heure de début des cours</label><input type="time" id="param-heure" value="07:30"></div>
+          <div style="align-self:end;"><button id="btnSaveParam">Enregistrer</button></div>
+        </div>
+        <div id="paramStatus"></div>
+      </div>
+
+      <div class="card">
+        <h2>Inspections (IEPP)</h2>
+        <div class="row">
+          <input id="n-inspection-nom" placeholder="Nom de l'inspection (ex. IEPP Méagui)">
+          <button id="btnAddInspection">Ajouter</button>
+        </div>
+        <div id="addInspectionStatus"></div>
+        <div class="scroll-x" style="margin-top:14px;">
+          <table>
+            <thead><tr><th>Nom</th><th></th></tr></thead>
+            <tbody id="inspectionsBody"><tr><td colspan="2" class="muted">Chargement…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
         <h2>Secteurs</h2>
         <div class="row">
           <input id="n-secteur-nom" placeholder="Nom du secteur">
@@ -216,8 +266,8 @@
         <div id="addSecteurStatus"></div>
         <div class="scroll-x" style="margin-top:14px;">
           <table>
-            <thead><tr><th>Nom</th><th></th></tr></thead>
-            <tbody id="secteursBody"><tr><td colspan="2" class="muted">Chargement…</td></tr></tbody>
+            <thead><tr><th>Nom</th><th>Inspection (IEPP)</th><th></th></tr></thead>
+            <tbody id="secteursBody"><tr><td colspan="3" class="muted">Chargement…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -260,6 +310,10 @@
         <div id="n-sites-affectes-wrap" class="hidden" style="margin-top:8px;">
           <label>Sites affectés (jusqu'à 4, dans le secteur choisi)</label>
           <div id="n-sites-affectes-list" class="row"></div>
+        </div>
+        <div id="n-inspection-wrap" class="hidden" style="margin-top:8px;">
+          <label>Inspection de rattachement</label>
+          <select id="n-inspection"><option value="">Choisir</option></select>
         </div>
         <p id="n-site-info" class="muted hidden" style="margin-top:8px;"></p>
         <div style="margin-top:12px;"><button id="btnAddActeur">Ajouter</button></div>

@@ -12,6 +12,8 @@ const reportRoutes = require('./routes/reports');
 const qrcodeRoutes = require('./routes/qrcodes');
 const adminRoutes = require('./routes/admins');
 const offlineRoutes = require('./routes/offline');
+const inspectionRoutes = require('./routes/inspections');
+const parametreRoutes = require('./routes/parametres');
 
 const app = express();
 
@@ -28,6 +30,8 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/qrcodes', qrcodeRoutes);
 app.use('/api/admins', adminRoutes);
 app.use('/api/offline', offlineRoutes);
+app.use('/api/inspections', inspectionRoutes);
+app.use('/api/parametres', parametreRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

@@ -1,4 +1,4 @@
-const CACHE = 'pointage-epi-v3';
+const CACHE = 'pointage-epi-v4';
 const SHELL = [
   '/', '/styles.css', '/app.js', '/manifest.json',
   '/vendor/bcrypt.min.js',
@@ -38,5 +38,16 @@ self.addEventListener('fetch', (event) => {
   // Fichiers de l'appli (CSS/JS/icônes) : cache d'abord, réseau en secours.
   event.respondWith(
     caches.match(req).then((cached) => cached || fetch(req))
+  );
+});
+
+// Clic sur une notification de rappel : on ramène l'utilisateur dans l'application.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+      if (wins.length) return wins[0].focus();
+      return self.clients.openWindow('/');
+    })
   );
 });
