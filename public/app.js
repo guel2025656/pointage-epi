@@ -109,12 +109,12 @@
       try{
         await apiSend('/api/pointages/'+it.type, 'POST', {
           acteurId: it.acteurId, pin: it.pin, date: it.date, heure: it.heure,
-          lat: it.lat, lng: it.lng, creeHorsLigne: true
+          lat: it.lat, lng: it.lng, siteId: it.siteId, periode: it.periode, creeHorsLigne: true
         });
       }catch(e){
         var msg = (e && e.error) || '';
         // erreur définitive (mauvais PIN, trop loin du site) : on n'insiste pas indéfiniment
-        if(!/PIN|loin|géolocalisation/i.test(msg)) remaining.push(it);
+        if(!/PIN|loin|géolocalisation|site|inspection|secteur|affecté/i.test(msg)) remaining.push(it);
       }
     }
     setQueue(remaining);
@@ -247,7 +247,7 @@
   // ---------- PIN modal ----------
   var pendingAction = null;
   function openPinModal(acteur, type){
-    pendingAction = { acteur: acteur, type: type, siteId: siteDuJourChoisi(acteur) };
+    pendingAction = { acteur: acteur, type: type, siteId: siteDuJourChoisi(acteur), periode: document.getElementById('p-periode').value };
     document.getElementById('pinModalActeur').textContent = acteur.nom+' — '+(type==='arrivee'?'Enregistrer mon arrivée':'Enregistrer mon départ');
     document.getElementById('pinInput').value = '';
     document.getElementById('pinModalStatus').innerHTML = '';
@@ -269,8 +269,8 @@
       statusEl.className='status err'; statusEl.textContent = geoErr.message;
       return;
     }
-    var acteur = pendingAction.acteur, type = pendingAction.type, siteChoisi = pendingAction.siteId;
-    var payload = { acteurId: acteur.id, pin: pin, date: todayStr(), heure: nowTime(), lat: geo.lat, lng: geo.lng, siteId: siteChoisi };
+    var acteur = pendingAction.acteur, type = pendingAction.type, siteChoisi = pendingAction.siteId, periodeChoisie = pendingAction.periode;
+    var payload = { acteurId: acteur.id, pin: pin, date: todayStr(), heure: nowTime(), lat: geo.lat, lng: geo.lng, siteId: siteChoisi, periode: periodeChoisie };
     if(!navigator.onLine){
       // Hors-ligne : on vérifie le PIN et la géolocalisation localement, avec les
       // données téléchargées à l'avance, pour donner un retour immédiat à l'acteur.
@@ -293,7 +293,7 @@
       }
       var q = getQueue(); q.push(Object.assign({type:type}, payload)); setQueue(q);
       closePinModal();
-      if(type==='arrivee') marquerArriveeFaite(acteur.id);
+      if(type==='arrivee') marquerArriveeFaite(acteur.id, periodeChoisie);
       setPointageStatus('Pointage enregistré hors-ligne — sera synchronisé au retour du réseau.', 'warn');
       renderMesPointages();
       return;
@@ -301,7 +301,7 @@
     try{
       await apiSend('/api/pointages/'+type, 'POST', payload);
       closePinModal();
-      if(type==='arrivee') marquerArriveeFaite(acteur.id);
+      if(type==='arrivee') marquerArriveeFaite(acteur.id, periodeChoisie);
       setPointageStatus((type==='arrivee'?'Arrivée':'Départ')+' enregistré(e) pour '+acteur.nom+' à '+payload.heure+'.', 'ok');
       renderMesPointages();
     }catch(e){
@@ -312,7 +312,7 @@
       }
       var q2 = getQueue(); q2.push(Object.assign({type:type}, payload)); setQueue(q2);
       closePinModal();
-      if(type==='arrivee') marquerArriveeFaite(acteur.id);
+      if(type==='arrivee') marquerArriveeFaite(acteur.id, periodeChoisie);
       setPointageStatus('Connexion instable — pointage mis en attente de synchronisation.', 'warn');
     }
   });
@@ -383,16 +383,16 @@
     try{
       var list = await apiGet('/api/pointages/mes-pointages?acteurId='+a.id);
       if(!list.length){ el.textContent = 'Aucun pointage enregistré pour le moment.'; return; }
-      el.innerHTML = '<table><thead><tr><th>Date</th><th>Arrivée</th><th>Départ</th></tr></thead><tbody>' +
+      el.innerHTML = '<table><thead><tr><th>Date</th><th>Demi-journée</th><th>Arrivée</th><th>Départ</th></tr></thead><tbody>' +
         list.map(function(p){
-          return '<tr><td>'+p.date.slice(0,10)+'</td><td>'+(p.heureArrivee||'—')+'</td><td>'+(p.heureDepart||'—')+'</td></tr>';
+          return '<tr><td>'+p.date.slice(0,10)+'</td><td>'+libellePeriode(p.periode)+'</td><td>'+(p.heureArrivee||'—')+'</td><td>'+(p.heureDepart||'—')+'</td></tr>';
         }).join('') + '</tbody></table>';
     }catch(e){
       var enAttente = getQueue().filter(function(it){ return it.acteurId===a.id; });
       if(!enAttente.length){ el.textContent = "Historique indisponible hors-ligne pour l'instant."; return; }
-      el.innerHTML = '<p class="muted">Hors-ligne — pointages en attente de synchronisation :</p><table><thead><tr><th>Date</th><th>Type</th><th>Heure</th></tr></thead><tbody>' +
+      el.innerHTML = '<p class="muted">Hors-ligne — pointages en attente de synchronisation :</p><table><thead><tr><th>Date</th><th>Demi-journée</th><th>Type</th><th>Heure</th></tr></thead><tbody>' +
         enAttente.map(function(it){
-          return '<tr><td>'+it.date+'</td><td>'+(it.type==='arrivee'?'Arrivée':'Départ')+'</td><td>'+it.heure+'</td></tr>';
+          return '<tr><td>'+it.date+'</td><td>'+libellePeriode(it.periode || (it.heure < '13:30' ? 'MATIN' : 'APRES_MIDI'))+'</td><td>'+(it.type==='arrivee'?'Arrivée':'Départ')+'</td><td>'+it.heure+'</td></tr>';
         }).join('') + '</tbody></table>';
     }
   }
@@ -429,7 +429,7 @@
       document.getElementById('adminsCard').classList.toggle('hidden', state.admin.portee!=='NATIONALE');
       loadDashboard(); loadAbsences(); loadQrCodes();
       loadInspectionsBody(); loadSecteursBody(); loadSitesBody(); loadActeursBody();
-      document.getElementById('param-heure').value = heureDebut();
+      remplirChampsHoraires();
       if(state.admin.portee==='NATIONALE'){ fillSelect('sv-secteur', state.secteurs, 'Choisir'); loadAdmins(); }
     }
   }
@@ -512,8 +512,8 @@
 
       var body = document.getElementById('pointagesBody');
       body.innerHTML = pointages.length ? pointages.slice(0,200).map(function(p){
-        return '<tr><td>'+p.date.slice(0,10)+'</td><td>'+p.acteur.nom+'</td><td>'+roleLabel(p.acteur.role)+'</td><td>'+p.site.nom+'</td><td>'+(p.heureArrivee||'—')+'</td><td>'+(p.heureDepart||'—')+'</td></tr>';
-      }).join('') : '<tr><td colspan="6" class="muted">Aucun pointage pour ces filtres.</td></tr>';
+        return '<tr><td>'+p.date.slice(0,10)+'</td><td>'+libellePeriode(p.periode)+'</td><td>'+p.acteur.nom+'</td><td>'+roleLabel(p.acteur.role)+'</td><td>'+p.site.nom+'</td><td>'+(p.heureArrivee||'—')+'</td><td>'+(p.heureDepart||'—')+'</td></tr>';
+      }).join('') : '<tr><td colspan="7" class="muted">Aucun pointage pour ces filtres.</td></tr>';
 
       var alertEl = document.getElementById('alertList');
       alertEl.innerHTML = alertes.length ? alertes.slice(0,30).map(function(al){
@@ -600,7 +600,7 @@
         try{
           await apiSend('/api/pointages/'+it.type, 'POST', {
             acteurId: it.acteurId, pin: it.pin, date: it.date, heure: it.heure,
-            lat: it.lat, lng: it.lng, creeHorsLigne: true
+            lat: it.lat, lng: it.lng, siteId: it.siteId, periode: it.periode, creeHorsLigne: true
           });
           ok++;
         }catch(e){ echecs++; }
@@ -624,6 +624,7 @@
     document.getElementById('pointerTitre').textContent = 'Se pointer — '+ROLE_TITRES[role];
     document.getElementById('rappelsCard').classList.toggle('hidden', !(role==='VOLONTAIRE' || role==='ENSEIGNANT_ITINERANT'));
     document.getElementById('p-acteur').value = '';
+    document.getElementById('p-periode').value = periodeCourante();
     majSiteDuJour();
     await loadActeurs(document.getElementById('p-secteur').value, document.getElementById('p-site').value, '');
   }
@@ -641,25 +642,45 @@
     document.querySelector('.tab[data-tab="admin"]').click();
   });
 
-  // ---------- Rappels de pointage (volontaires et itinérants) ----------
-  function heureDebut(){ return localStorage.getItem('epi_heure_debut') || '07:30'; }
+  // ---------- Horaires (matin / après-midi) et rappels de pointage ----------
+  // Pas de cours le mercredi. Les horaires viennent des paramètres (Administration).
+  var HORAIRES_DEFAUT = { heureDebutMatin:'08:00', heureFinMatin:'12:15', heureDebutApresMidi:'14:30', heureFinApresMidi:'17:30' };
+  var JOURS_SANS_COURS = [0, 3, 6]; // dimanche, mercredi, samedi
+  function horaires(){
+    try{ return Object.assign({}, HORAIRES_DEFAUT, JSON.parse(localStorage.getItem('epi_horaires')||'{}')); }
+    catch(e){ return Object.assign({}, HORAIRES_DEFAUT); }
+  }
   function enMinutes(hhmm){ var p = hhmm.split(':'); return parseInt(p[0],10)*60 + parseInt(p[1],10); }
+  function periodeCourante(){
+    var d = new Date(); return (d.getHours()*60 + d.getMinutes()) < 13*60+30 ? 'MATIN' : 'APRES_MIDI';
+  }
+  function libellePeriode(p){ return p==='APRES_MIDI' ? 'Après-midi' : 'Matin'; }
   function monActeur(){ try{ return JSON.parse(localStorage.getItem('epi_mon_acteur')||'null'); }catch(e){ return null; } }
-  function marquerArriveeFaite(id){ localStorage.setItem('epi_arrivee_'+todayStr()+'_'+id, '1'); }
-  function arriveeFaite(id){ return !!localStorage.getItem('epi_arrivee_'+todayStr()+'_'+id); }
+  function marquerArriveeFaite(id, periode){ localStorage.setItem('epi_arrivee_'+todayStr()+'_'+periode+'_'+id, '1'); }
+  function arriveeFaite(id, periode){ return !!localStorage.getItem('epi_arrivee_'+todayStr()+'_'+periode+'_'+id); }
+  function majHorairesUI(){
+    var h = horaires();
+    var sel = document.getElementById('p-periode');
+    if(sel){
+      sel.options[0].textContent = 'Matin ('+h.heureDebutMatin+' – '+h.heureFinMatin+')';
+      sel.options[1].textContent = 'Après-midi ('+h.heureDebutApresMidi+' – '+h.heureFinApresMidi+')';
+    }
+    var r = document.getElementById('rappelHeure');
+    if(r) r.textContent = h.heureDebutMatin+' et '+h.heureDebutApresMidi;
+  }
   async function chargerParametres(){
-    try{ var p = await apiGet('/api/parametres'); localStorage.setItem('epi_heure_debut', p.heureDebutCours); }
-    catch(e){ var b = getOfflineBundle(); if(b && b.parametres) localStorage.setItem('epi_heure_debut', b.parametres.heureDebutCours); }
-    majRappelsUI();
+    try{ var p = await apiGet('/api/parametres'); localStorage.setItem('epi_horaires', JSON.stringify(p)); }
+    catch(e){ var b = getOfflineBundle(); if(b && b.parametres) localStorage.setItem('epi_horaires', JSON.stringify(b.parametres)); }
+    majHorairesUI(); majRappelsUI();
   }
   function majRappelsUI(){
-    var h = document.getElementById('rappelHeure'); if(h) h.textContent = heureDebut();
+    majHorairesUI();
     var st = document.getElementById('rappelsStatus'); if(!st) return;
-    var m = monActeur();
+    var m = monActeur(), h = horaires();
     document.getElementById('btnDesactiverRappels').classList.toggle('hidden', !m);
     if(!m){ st.textContent = 'Rappels non activés sur cet appareil.'; return; }
     var notif = (window.Notification && Notification.permission==='granted') ? ' Notifications autorisées.' : ' (Autorisez les notifications du navigateur pour être alerté même hors de la page.)';
-    st.textContent = 'Rappels activés pour '+m.nom+' (lundi à vendredi, 5 min avant et 5 min après '+heureDebut()+').'+notif+' Ils s\'affichent quand l\'application est ouverte.';
+    st.textContent = 'Rappels activés pour '+m.nom+' (lundi, mardi, jeudi, vendredi : 5 min avant et 5 min après '+h.heureDebutMatin+' et '+h.heureDebutApresMidi+').'+notif+" Ils s'affichent quand l'application est ouverte.";
   }
   function bip(){
     try{
@@ -685,18 +706,22 @@
   }
   function checkRappels(){
     var m = monActeur(); if(!m) return;
-    var d = new Date(); if(d.getDay()===0 || d.getDay()===6) return;
-    if(arriveeFaite(m.id)) { document.getElementById('rappelBanner').classList.add('hidden'); return; }
+    var d = new Date(); if(JOURS_SANS_COURS.indexOf(d.getDay())!==-1) return;
+    var h = horaires();
     var maintenant = d.getHours()*60 + d.getMinutes();
-    var debut = enMinutes(heureDebut());
-    var cle = 'epi_rappel_'+todayStr()+'_'+m.id+'_';
-    if(maintenant >= debut-5 && maintenant < debut && !localStorage.getItem(cle+'avant')){
-      localStorage.setItem(cle+'avant', '1');
-      declencherRappel('Rappel : les cours commencent à '+heureDebut()+'. Pensez à pointer votre arrivée.');
-    } else if(maintenant >= debut+5 && maintenant < debut+120 && !localStorage.getItem(cle+'apres')){
-      localStorage.setItem(cle+'apres', '1');
-      declencherRappel("Vous n'avez pas encore pointé ! Les cours ont commencé à "+heureDebut()+'.');
-    }
+    [['MATIN', h.heureDebutMatin], ['APRES_MIDI', h.heureDebutApresMidi]].forEach(function(per){
+      var periode = per[0], heure = per[1], debut = enMinutes(heure);
+      if(arriveeFaite(m.id, periode)) return;
+      var nom = periode==='MATIN' ? 'du matin' : "de l'après-midi";
+      var cle = 'epi_rappel_'+todayStr()+'_'+periode+'_'+m.id+'_';
+      if(maintenant >= debut-5 && maintenant < debut && !localStorage.getItem(cle+'avant')){
+        localStorage.setItem(cle+'avant', '1');
+        declencherRappel('Rappel : les cours '+nom+' commencent à '+heure+'. Pensez à pointer votre arrivée.');
+      } else if(maintenant >= debut+5 && maintenant < debut+90 && !localStorage.getItem(cle+'apres')){
+        localStorage.setItem(cle+'apres', '1');
+        declencherRappel("Vous n'avez pas encore pointé ! Les cours "+nom+' ont commencé à '+heure+'.');
+      }
+    });
   }
   setInterval(checkRappels, 15000);
   setTimeout(checkRappels, 1500);
@@ -724,20 +749,23 @@
     var a = currentActeur() || monActeur();
     var st = document.getElementById('rappelsStatus');
     if(!a){ st.textContent = "Choisissez d'abord votre nom dans la liste ci-dessus."; return; }
-    var debut = enMinutes(heureDebut());
+    var h = horaires();
     var pad = function(n){ return (n<10?'0':'')+n; };
-    var d = new Date(); while(d.getDay()===0 || d.getDay()===6) d.setDate(d.getDate()+1);
+    var d = new Date(); while(JOURS_SANS_COURS.indexOf(d.getDay())!==-1) d.setDate(d.getDate()+1);
     var jour = d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate());
     var dt = function(mins){ return jour+'T'+pad(Math.floor(mins/60))+pad(mins%60)+'00'; };
     var stamp = new Date().toISOString().replace(/[-:]/g,'').split('.')[0]+'Z';
+    var dm = enMinutes(h.heureDebutMatin), da = enMinutes(h.heureDebutApresMidi);
     var evts = [
-      { titre: 'Pointage EPI : pensez à pointer votre arrivée', mins: debut-5 },
-      { titre: "Pointage EPI : pointez maintenant, les cours ont commencé !", mins: debut+5 }
+      { titre: 'Pointage EPI : pointez votre arrivée (cours du matin à '+h.heureDebutMatin+')', mins: dm-5 },
+      { titre: 'Pointage EPI : pointez maintenant, les cours du matin ont commencé !', mins: dm+5 },
+      { titre: "Pointage EPI : pointez votre arrivée (cours de l'après-midi à "+h.heureDebutApresMidi+')', mins: da-5 },
+      { titre: "Pointage EPI : pointez maintenant, les cours de l'après-midi ont commencé !", mins: da+5 }
     ];
     var lignes = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Pointage EPI//FR','CALSCALE:GREGORIAN'];
     evts.forEach(function(e, i){
       lignes.push('BEGIN:VEVENT','UID:epi-rappel-'+i+'-'+Date.now()+'@pointage-epi','DTSTAMP:'+stamp,
-        'DTSTART:'+dt(e.mins),'DTEND:'+dt(e.mins+5),'RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR',
+        'DTSTART:'+dt(e.mins),'DTEND:'+dt(e.mins+5),'RRULE:FREQ=WEEKLY;BYDAY=MO,TU,TH,FR',
         'SUMMARY:'+e.titre,'DESCRIPTION:Ouvrez Pointage EPI pour enregistrer votre arrivée.',
         'BEGIN:VALARM','TRIGGER:PT0S','ACTION:DISPLAY','DESCRIPTION:'+e.titre,'END:VALARM','END:VEVENT');
     });
@@ -745,7 +773,7 @@
     var blob = new Blob([lignes.join('\r\n')], { type: 'text/calendar' });
     var lien = document.createElement('a');
     lien.href = URL.createObjectURL(blob); lien.download = 'rappels-pointage-epi.ics'; lien.click();
-    st.textContent = "Fichier téléchargé : ouvrez-le pour ajouter les rappels (lundi–vendredi) à l'agenda du téléphone.";
+    st.textContent = "Fichier téléchargé : ouvrez-le pour ajouter les 4 rappels quotidiens (lundi, mardi, jeudi, vendredi) à l'agenda du téléphone.";
   });
 
   // ---------- Inspections (IEPP) ----------
@@ -798,14 +826,20 @@
     }).join('');
   }
 
-  // ---------- Paramètres (heure de début des cours) ----------
+  // ---------- Paramètres (horaires des demi-journées) ----------
+  var CHAMPS_HORAIRES = { heureDebutMatin:'param-debut-matin', heureFinMatin:'param-fin-matin', heureDebutApresMidi:'param-debut-pm', heureFinApresMidi:'param-fin-pm' };
+  function remplirChampsHoraires(){
+    var h = horaires();
+    Object.keys(CHAMPS_HORAIRES).forEach(function(k){ document.getElementById(CHAMPS_HORAIRES[k]).value = h[k]; });
+  }
   document.getElementById('btnSaveParam').addEventListener('click', async function(){
     var st = document.getElementById('paramStatus');
-    var v = document.getElementById('param-heure').value;
+    var body = {};
+    Object.keys(CHAMPS_HORAIRES).forEach(function(k){ body[k] = document.getElementById(CHAMPS_HORAIRES[k]).value; });
     try{
-      await apiSend('/api/parametres', 'PATCH', { heureDebutCours: v });
-      localStorage.setItem('epi_heure_debut', v); majRappelsUI();
-      st.className='status ok'; st.textContent='Heure de début des cours enregistrée : '+v+'.';
+      var p = await apiSend('/api/parametres', 'PATCH', body);
+      localStorage.setItem('epi_horaires', JSON.stringify(p)); majRappelsUI();
+      st.className='status ok'; st.textContent='Horaires enregistrés.';
     }catch(e){ st.className='status err'; st.textContent=(e&&e.error)||'Échec.'; }
   });
 
@@ -1104,6 +1138,7 @@
     applyUrlSite();
     renderQueue();
     renderOfflineStatus();
+    majHorairesUI();
     chargerParametres();
     await loadSecteurs();
     loadInspections();

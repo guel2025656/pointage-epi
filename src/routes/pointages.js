@@ -20,6 +20,13 @@ async function checkPin(acteurId, pin) {
   return ok ? acteur : null;
 }
 
+// Demi-journée du pointage : celle envoyée par l'appareil, sinon déduite de l'heure
+// (avant 13h30 = matin). Les anciens pointages en attente n'ont pas de période.
+function resoudrePeriode(periode, heure) {
+  if (periode === 'MATIN' || periode === 'APRES_MIDI') return periode;
+  return String(heure) < '13:30' ? 'MATIN' : 'APRES_MIDI';
+}
+
 // Détermine le site effectif du pointage et vérifie qu'il est bien dans le
 // périmètre de l'acteur, selon son rôle :
 // VOLONTAIRE → son site fixe uniquement. ENSEIGNANT_ITINERANT → l'un de ses
@@ -89,7 +96,7 @@ function verifierPresenceSurSite(site, lat, lng) {
 
 // POST /api/pointages/arrivee
 router.post('/arrivee', async (req, res) => {
-  const { acteurId, pin, date, heure, lat, lng, siteId, creeHorsLigne } = req.body || {};
+  const { acteurId, pin, date, heure, lat, lng, siteId, periode: periodeDemandee, creeHorsLigne } = req.body || {};
   if (!acteurId || !pin || !date || !heure) {
     return res.status(400).json({ error: 'acteurId, pin, date et heure sont requis.' });
   }
@@ -103,11 +110,12 @@ router.post('/arrivee', async (req, res) => {
   const erreurPosition = verifierPresenceSurSite(site, lat ?? null, lng ?? null);
   if (erreurPosition) return res.status(403).json({ error: erreurPosition });
 
+  const periode = resoudrePeriode(periodeDemandee, heure);
   const pointage = await prisma.pointage.upsert({
-    where: { acteurId_date: { acteurId, date: todayUtcDate(date) } },
+    where: { acteurId_date_periode: { acteurId, date: todayUtcDate(date), periode } },
     update: { heureArrivee: heure, latArrivee: lat ?? null, lngArrivee: lng ?? null, siteId: siteEffectif },
     create: {
-      acteurId, siteId: siteEffectif, date: todayUtcDate(date),
+      acteurId, siteId: siteEffectif, date: todayUtcDate(date), periode,
       heureArrivee: heure, latArrivee: lat ?? null, lngArrivee: lng ?? null,
       creeHorsLigne: !!creeHorsLigne,
     },
@@ -117,7 +125,7 @@ router.post('/arrivee', async (req, res) => {
 
 // POST /api/pointages/depart
 router.post('/depart', async (req, res) => {
-  const { acteurId, pin, date, heure, lat, lng, siteId, creeHorsLigne } = req.body || {};
+  const { acteurId, pin, date, heure, lat, lng, siteId, periode: periodeDemandee, creeHorsLigne } = req.body || {};
   if (!acteurId || !pin || !date || !heure) {
     return res.status(400).json({ error: 'acteurId, pin, date et heure sont requis.' });
   }
@@ -131,11 +139,12 @@ router.post('/depart', async (req, res) => {
   const erreurPosition = verifierPresenceSurSite(site, lat ?? null, lng ?? null);
   if (erreurPosition) return res.status(403).json({ error: erreurPosition });
 
+  const periode = resoudrePeriode(periodeDemandee, heure);
   const pointage = await prisma.pointage.upsert({
-    where: { acteurId_date: { acteurId, date: todayUtcDate(date) } },
+    where: { acteurId_date_periode: { acteurId, date: todayUtcDate(date), periode } },
     update: { heureDepart: heure, latDepart: lat ?? null, lngDepart: lng ?? null },
     create: {
-      acteurId, siteId: siteEffectif, date: todayUtcDate(date),
+      acteurId, siteId: siteEffectif, date: todayUtcDate(date), periode,
       heureDepart: heure, latDepart: lat ?? null, lngDepart: lng ?? null,
       creeHorsLigne: !!creeHorsLigne,
     },
@@ -169,8 +178,8 @@ router.get('/mes-pointages', async (req, res) => {
   if (!acteurId) return res.status(400).json({ error: 'acteurId requis.' });
   const pointages = await prisma.pointage.findMany({
     where: { acteurId },
-    orderBy: { date: 'desc' },
-    take: 15,
+    orderBy: [{ date: 'desc' }, { periode: 'desc' }],
+    take: 30,
   });
   res.json(pointages);
 });

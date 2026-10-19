@@ -22,10 +22,11 @@ router.get('/csv', requireAdmin, async (req, res) => {
     orderBy: { date: 'desc' },
   });
 
-  const rows = [['Date', 'Acteur', 'Rôle', 'Site', 'Arrivée', 'Départ']];
+  const rows = [['Date', 'Demi-journée', 'Acteur', 'Rôle', 'Site', 'Arrivée', 'Départ']];
   pointages.forEach((p) => {
     rows.push([
       p.date.toISOString().slice(0, 10),
+      p.periode === 'APRES_MIDI' ? 'Après-midi' : 'Matin',
       p.acteur.nom,
       p.acteur.role,
       p.site.nom,
@@ -56,7 +57,7 @@ router.get('/alertes', requireAdmin, async (req, res) => {
       acteurId: a.id,
       nom: a.nom,
       role: a.role,
-      site: a.site.nom,
+      site: a.site ? a.site.nom : '—',
       joursActifs: new Set(a.pointages.map((p) => p.date.toISOString().slice(0, 10))).size,
     }))
     .filter((a) => a.joursActifs <= 1)
@@ -71,9 +72,12 @@ router.get('/taux-presence', requireAdmin, async (req, res) => {
   const date = new Date(dateStr + 'T00:00:00.000Z');
 
   const totalActeurs = await prisma.acteur.count({ where: { actif: true, ...scopeFilter(req) } });
-  const presents = await prisma.pointage.count({
+  // Un acteur est compté présent s'il a pointé au moins une demi-journée ce jour-là.
+  const presents = (await prisma.pointage.findMany({
     where: { date, acteur: { ...scopeFilter(req) } },
-  });
+    distinct: ['acteurId'],
+    select: { acteurId: true },
+  })).length;
 
   res.json({
     date: dateStr,

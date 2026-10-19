@@ -63,6 +63,11 @@
         <label id="siteDuJourLabel">Site où vous pointez aujourd'hui</label>
         <select id="p-site-du-jour"></select>
       </div>
+      <label>Demi-journée</label>
+      <select id="p-periode">
+        <option value="MATIN">Matin (08:00 – 12:15)</option>
+        <option value="APRES_MIDI">Après-midi (14:30 – 17:30)</option>
+      </select>
       <div class="row" style="margin-top:14px;">
         <button id="btnArrivee">Enregistrer mon arrivée</button>
         <button class="secondary" id="btnDepart">Enregistrer mon départ</button>
@@ -71,7 +76,7 @@
     </div>
     <div class="card hidden" id="rappelsCard">
       <h2>Rappels de pointage</h2>
-      <p class="muted">Un rappel vous est envoyé 5 minutes avant et 5 minutes après l'heure de début des cours (<span id="rappelHeure">07:30</span>), si vous n'avez pas encore pointé. Choisissez votre nom ci-dessus, puis activez les rappels sur cet appareil.</p>
+      <p class="muted">Un rappel vous est envoyé 5 minutes avant et 5 minutes après l'heure de début de chaque demi-journée (<span id="rappelHeure">08:00 et 14:30</span>), si vous n'avez pas encore pointé. Pas de rappel le mercredi. Choisissez votre nom ci-dessus, puis activez les rappels sur cet appareil.</p>
       <div class="row">
         <button class="secondary small" id="btnActiverRappels">Activer les rappels sur cet appareil</button>
         <button class="secondary small" id="btnRappelsAgenda">Ajouter à l'agenda du téléphone (.ics)</button>
@@ -132,8 +137,8 @@
         <h2>Journal des pointages</h2>
         <div class="scroll-x">
           <table>
-            <thead><tr><th>Date</th><th>Acteur</th><th>Rôle</th><th>Site</th><th>Arrivée</th><th>Départ</th></tr></thead>
-            <tbody id="pointagesBody"><tr><td colspan="6" class="muted">Chargement…</td></tr></tbody>
+            <thead><tr><th>Date</th><th>Demi-journée</th><th>Acteur</th><th>Rôle</th><th>Site</th><th>Arrivée</th><th>Départ</th></tr></thead>
+            <tbody id="pointagesBody"><tr><td colspan="7" class="muted">Chargement…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -234,11 +239,17 @@
       </div>
 
       <div class="card">
-        <h2>Paramètres</h2>
+        <h2>Horaires des cours</h2>
+        <p class="muted">Le pointage se fait par demi-journée. Pas de cours le mercredi. Les rappels se basent sur les heures de début.</p>
         <div class="row">
-          <div><label>Heure de début des cours</label><input type="time" id="param-heure" value="07:30"></div>
-          <div style="align-self:end;"><button id="btnSaveParam">Enregistrer</button></div>
+          <div><label>Matin — début</label><input type="time" id="param-debut-matin" value="08:00"></div>
+          <div><label>Matin — fin</label><input type="time" id="param-fin-matin" value="12:15"></div>
         </div>
+        <div class="row">
+          <div><label>Après-midi — début</label><input type="time" id="param-debut-pm" value="14:30"></div>
+          <div><label>Après-midi — fin</label><input type="time" id="param-fin-pm" value="17:30"></div>
+        </div>
+        <div style="margin-top:12px;"><button id="btnSaveParam">Enregistrer</button></div>
         <div id="paramStatus"></div>
       </div>
 
