@@ -216,7 +216,7 @@
     }).join('');
   }
   function roleLabel(r){
-    return {ENSEIGNANT_ITINERANT:'Enseignant itinérant',VOLONTAIRE:'Volontaire',CANEF:'CANEF',CPPP:'CPPP',IEPP:'IEPP'}[r]||r;
+    return {ENSEIGNANT_ITINERANT:'Enseignant itinérant',VOLONTAIRE:'Volontaire',CANEF:'CAENF',CPPP:'CPPP',IEPP:'IEPP'}[r]||r;
   }
 
   document.getElementById('p-categorie').addEventListener('change', function(){
@@ -616,7 +616,7 @@
 
 
   // ---------- Accueil par catégorie ----------
-  var ROLE_TITRES = { VOLONTAIRE:'Volontaire', ENSEIGNANT_ITINERANT:'Enseignant itinérant', CPPP:'CPPP', CANEF:'CANEF', IEPP:'IEPP' };
+  var ROLE_TITRES = { VOLONTAIRE:'Volontaire', ENSEIGNANT_ITINERANT:'Enseignant itinérant', CPPP:'CPPP', CANEF:'CAENF', IEPP:'IEPP' };
   async function choisirRole(role){
     state.roleChoisi = role;
     document.getElementById('accueilCard').classList.add('hidden');
@@ -641,6 +641,32 @@
   document.getElementById('btnAccueilAdmin').addEventListener('click', function(){
     document.querySelector('.tab[data-tab="admin"]').click();
   });
+
+  // ---------- Installation (raccourci sur l'écran d'accueil du téléphone) ----------
+  var installEvt = null;
+  function dejaInstallee(){
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  }
+  function majInstallUI(){
+    var card = document.getElementById('installCard'); if(!card) return;
+    if(dejaInstallee()){ card.classList.add('hidden'); return; }
+    card.classList.remove('hidden');
+    var ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    document.getElementById('btnInstaller').classList.toggle('hidden', !installEvt);
+    var aide = document.getElementById('installAide');
+    if(installEvt) aide.textContent = "Ajoutez l'application à l'écran d'accueil : elle s'ouvrira comme une vraie application, même sans internet.";
+    else if(ios) aide.textContent = "Sur iPhone : ouvrez cette page dans Safari, touchez le bouton Partager, puis « Sur l'écran d'accueil ».";
+    else aide.textContent = "Sur Android : touchez le menu ⋮ du navigateur (Chrome), puis « Installer l'application » ou « Ajouter à l'écran d'accueil ».";
+  }
+  window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); installEvt = e; majInstallUI(); });
+  window.addEventListener('appinstalled', function(){ installEvt = null; majInstallUI(); });
+  document.getElementById('btnInstaller').addEventListener('click', async function(){
+    if(!installEvt) return;
+    installEvt.prompt();
+    try{ await installEvt.userChoice; }catch(e){}
+    installEvt = null; majInstallUI();
+  });
+  majInstallUI();
 
   // ---------- Horaires (matin / après-midi) et rappels de pointage ----------
   // Pas de cours le mercredi. Les horaires viennent des paramètres (Administration).

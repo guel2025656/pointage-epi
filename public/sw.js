@@ -1,8 +1,9 @@
-const CACHE = 'pointage-epi-v4';
+const CACHE = 'pointage-epi-v5';
 const SHELL = [
   '/', '/styles.css', '/app.js', '/manifest.json',
   '/vendor/bcrypt.min.js',
-  '/assets/unicef-logo.svg', '/assets/armoiries-ci.svg',
+  '/assets/unicef-logo.svg', '/assets/armoiries-ci.svg', '/assets/armoiries.png',
+  '/assets/icon-192.png', '/assets/icon-512.png', '/assets/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', (event) => {

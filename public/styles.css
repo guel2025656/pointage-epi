@@ -76,3 +76,6 @@ th{color:var(--text-secondary);font-weight:500;font-size:12px;}
 .home-btn.admin{background:var(--surface-1);color:var(--text-primary);border:1px solid var(--border-strong);}
 .rappel-banner{position:fixed;top:0;left:0;right:0;z-index:50;background:#b45309;color:#fff;padding:12px 14px;font-weight:600;display:flex;gap:10px;align-items:center;flex-wrap:wrap;box-shadow:0 2px 8px rgba(0,0,0,.3);}
 .rappel-banner.hidden{display:none !important;}
+
+.install-card{margin-top:18px;padding:12px 14px;border:1px dashed var(--border-strong);border-radius:10px;}
+.install-card.hidden{display:none !important;}

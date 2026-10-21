@@ -1,7 +1,7 @@
 # Pointage EPI
 
 Application de pointage et de suivi de présence des acteurs de l'EPI
-(enseignants itinérants, volontaires, CANEF, CPPP, IEPP).
+(enseignants itinérants, volontaires, CAENF, CPPP, IEPP).
 
 Stack : Node.js / Express / Prisma / PostgreSQL, frontend en HTML/JS pur
 (mobile-first), avec file d'attente hors-ligne côté navigateur.

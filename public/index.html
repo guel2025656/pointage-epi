@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pointage EPI</title>
 <link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#1CABE2">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Pointage EPI">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
 <link rel="stylesheet" href="/styles.css">
 <script src="/vendor/bcrypt.min.js"></script>
 </head>
@@ -36,9 +41,14 @@
         <button class="home-btn" data-role="VOLONTAIRE">Volontaire</button>
         <button class="home-btn" data-role="ENSEIGNANT_ITINERANT">Enseignant itinérant</button>
         <button class="home-btn" data-role="CPPP">CPPP</button>
-        <button class="home-btn" data-role="CANEF">CANEF</button>
+        <button class="home-btn" data-role="CANEF">CAENF</button>
         <button class="home-btn" data-role="IEPP">IEPP</button>
         <button class="home-btn admin" id="btnAccueilAdmin">Administrateur</button>
+      </div>
+      <div id="installCard" class="install-card hidden">
+        <strong>Installer l'application sur ce téléphone</strong>
+        <p class="muted" id="installAide" style="margin:6px 0;"></p>
+        <button id="btnInstaller" class="small hidden">Installer sur cet appareil</button>
       </div>
     </div>
     <div class="card hidden" id="pointerCard">
@@ -307,7 +317,7 @@
             <select id="n-role">
               <option value="ENSEIGNANT_ITINERANT">Enseignant itinérant</option>
               <option value="VOLONTAIRE">Volontaire</option>
-              <option value="CANEF">CANEF</option>
+              <option value="CANEF">CAENF</option>
               <option value="CPPP">CPPP</option>
               <option value="IEPP">IEPP</option>
             </select>

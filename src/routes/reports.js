@@ -2,6 +2,11 @@ const express = require('express');
 const prisma = require('../lib/prisma');
 const { requireAdmin, scopeFilter } = require('../middleware/auth');
 
+const LIBELLES_ROLE = {
+  ENSEIGNANT_ITINERANT: 'Enseignant itinérant', VOLONTAIRE: 'Volontaire',
+  CANEF: 'CAENF', CPPP: 'CPPP', IEPP: 'IEPP',
+};
+
 const router = express.Router();
 
 // GET /api/reports/csv?secteurId=&siteId=&from=&to=
@@ -28,7 +33,7 @@ router.get('/csv', requireAdmin, async (req, res) => {
       p.date.toISOString().slice(0, 10),
       p.periode === 'APRES_MIDI' ? 'Après-midi' : 'Matin',
       p.acteur.nom,
-      p.acteur.role,
+      LIBELLES_ROLE[p.acteur.role] || p.acteur.role,
       p.site.nom,
       p.heureArrivee || '',
       p.heureDepart || '',
