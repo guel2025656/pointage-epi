@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node src/server.js",
     "postinstall": "prisma generate",
-    "start": "prisma migrate deploy && node src/server.js",
+    "start": "node node_modules/prisma/build/index.js db push --skip-generate && node src/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "prisma:migrate:dev": "prisma migrate dev",
@@ -23,6 +23,6 @@
     "qrcode": "^1.5.4"
   },
   "prisma": {
-  "seed": "node prisma/seed.js"
+    "seed": "node prisma/seed.js"
   }
 }
